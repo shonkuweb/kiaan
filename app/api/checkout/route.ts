@@ -1,5 +1,5 @@
 import { NextRequest } from 'next/server';
-import { createOrder, getProductById, updateProduct } from '../../lib/server/db';
+import { createOrder, getProductById, updateProduct, getStoreSettings } from '../../lib/server/db';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -65,8 +65,31 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    const shipping = calculatedSubtotal >= 999 ? 0 : 69;
-    const finalTotal = clientTotal > 0 ? clientTotal : (calculatedSubtotal + shipping);
+    const storeSettings = getStoreSettings();
+
+    // Check minimum order value
+    const minOrderVal = storeSettings.minOrderValue ?? 0;
+    if (minOrderVal > 0 && calculatedSubtotal < minOrderVal) {
+      return Response.json(
+        { error: `Minimum order value is ₹${minOrderVal}. Your current subtotal is ₹${calculatedSubtotal}.` },
+        { status: 400 }
+      );
+    }
+
+    // Check minimum order quantity
+    const minOrderQty = storeSettings.minOrderQuantity ?? 1;
+    const totalItemQty = items.reduce((sum: number, it: any) => sum + (Number(it.quantity) || 1), 0);
+    if (minOrderQty > 1 && totalItemQty < minOrderQty) {
+      return Response.json(
+        { error: `Minimum order quantity is ${minOrderQty} items. Your current cart has ${totalItemQty} items.` },
+        { status: 400 }
+      );
+    }
+
+    const freeThreshold = storeSettings.freeDeliveryThreshold ?? 999;
+    const standardCharge = storeSettings.deliveryCharge ?? 69;
+    const shipping = (freeThreshold > 0 && calculatedSubtotal >= freeThreshold) ? 0 : standardCharge;
+    const finalTotal = calculatedSubtotal + shipping;
 
     const paymentLabel = paymentMethod && paymentMethod !== 'cod'
       ? paymentMethod

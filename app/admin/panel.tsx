@@ -617,24 +617,41 @@ export function AdminPanel({ tab }: { tab: Tab }) {
                       const thumb = c.image || (c.id === 'agrocare' ? '/images/essentials.webp' : '/images/collection.webp');
                       return (
                         <article className="admin-category-row" key={c.id}>
-                          <div style={{
-                            width: '46px',
-                            height: '46px',
-                            borderRadius: '50%',
-                            overflow: 'hidden',
-                            border: '2px solid #dce5d0',
-                            background: '#f2f5ed',
-                            flexShrink: 0,
-                            display: 'grid',
-                            placeItems: 'center'
-                          }}>
+                          <span
+                            className="admin-category-thumb"
+                            style={{
+                              width: '46px',
+                              height: '46px',
+                              minWidth: '46px',
+                              maxWidth: '46px',
+                              aspectRatio: '1 / 1',
+                              flex: '0 0 46px',
+                              borderRadius: '50%',
+                              overflow: 'hidden',
+                              border: '2px solid #dce5d0',
+                              background: '#f2f5ed',
+                              flexShrink: 0,
+                              display: 'grid',
+                              placeItems: 'center',
+                            }}
+                          >
                             {thumb ? (
-                              <img src={thumb} alt={c.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                              <img
+                                src={thumb}
+                                alt={c.name}
+                                style={{
+                                  width: '100%',
+                                  height: '100%',
+                                  aspectRatio: '1 / 1',
+                                  objectFit: 'cover',
+                                  display: 'block',
+                                }}
+                              />
                             ) : (
                               <Icon name={c.id === 'adenium' ? 'leaf' : 'tag'} />
                             )}
-                          </div>
-                          <div>
+                          </span>
+                          <div className="admin-category-info">
                             <h3>
                               {c.name}
                               {c.isVisible ? (
