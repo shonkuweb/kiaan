@@ -1037,6 +1037,77 @@
   gap: 12px;
 }
 
+.razorpay-only-card {
+  padding: 20px;
+  border: 1.5px solid #286b22;
+  border-radius: 14px;
+  background: #f4f8ed;
+  box-shadow: 0 4px 16px rgba(33, 89, 28, 0.08);
+}
+
+.razorpay-brand-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+
+.razorpay-logo-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: 700;
+  font-size: 14px;
+  color: #1b4916;
+}
+
+.razorpay-logo-badge svg {
+  width: 16px;
+  height: 16px;
+}
+
+.razorpay-card-header strong {
+  display: block;
+  font-size: 16px;
+  color: #102d15;
+  margin-bottom: 6px;
+}
+
+.razorpay-card-desc {
+  font-size: 13px;
+  line-height: 1.5;
+  color: #445547;
+  margin-bottom: 12px;
+}
+
+.payment-methods-pills {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 14px;
+}
+
+.pay-method-pill {
+  font-size: 11px;
+  font-weight: 600;
+  padding: 4px 10px;
+  background: #e4eed7;
+  color: #1b4d18;
+  border-radius: 6px;
+  border: 1px solid #c9dec0;
+}
+
+.cod-disabled-notice {
+  font-size: 12px;
+  line-height: 1.45;
+  color: #5d6d5c;
+  background: #faf8f2;
+  border: 1px solid #e5ded0;
+  padding: 9px 12px;
+  border-radius: 8px;
+}
+
 .payment-card {
   display: flex;
   align-items: flex-start;

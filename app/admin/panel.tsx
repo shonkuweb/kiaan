@@ -13,7 +13,20 @@ type Tab = 'inventory' | 'orders' | 'categories' | 'settings';
 type Category = ProductCategory;
 type Item = InventoryProduct;
 type Order = { id: string; customer: string; details: string; total: number; status: string; date: string };
-type Settings = { title: string; subtitle: string; hero: boolean; featured: boolean; reviews: boolean; newsletter: boolean };
+type Settings = {
+  title: string;
+  subtitle: string;
+  hero: boolean;
+  featured: boolean;
+  reviews: boolean;
+  newsletter: boolean;
+  adminPassword?: string;
+  minOrderValue?: number;
+  minOrderQuantity?: number;
+  deliveryCharge?: number;
+  freeDeliveryThreshold?: number;
+  hasPassword?: boolean;
+};
 type Data = { categories: Category[]; products: Item[]; orders: Order[]; settings: Settings };
 
 const initialSettings: Settings = {
@@ -23,6 +36,10 @@ const initialSettings: Settings = {
   featured: true,
   reviews: true,
   newsletter: true,
+  minOrderValue: 0,
+  minOrderQuantity: 1,
+  deliveryCharge: 69,
+  freeDeliveryThreshold: 999,
 };
 
 const initial: Data = {
@@ -43,6 +60,10 @@ const tabs: { id: Tab; label: string; href: string; icon: IconName }[] = [
 export function AdminPanel({ tab }: { tab: Tab }) {
   const [data, setData] = useState<Data>(initial);
   const [ready, setReady] = useState(false);
+  const [isAuthenticated, setIsAuthenticated] = useState<boolean | null>(null);
+  const [loginPassword, setLoginPassword] = useState('');
+  const [loginError, setLoginError] = useState('');
+  const [isLoggingIn, setIsLoggingIn] = useState(false);
   const [query, setQuery] = useState('');
   const [filter, setFilter] = useState('All orders');
   const [categoryId, setCategoryId] = useState('');
@@ -50,7 +71,7 @@ export function AdminPanel({ tab }: { tab: Tab }) {
   const [editingCategory, setEditingCategory] = useState<Category | null>(null);
   const [categoryImage, setCategoryImage] = useState('');
   const [categoryImageUploading, setCategoryImageUploading] = useState(false);
-  const [modal, setModal] = useState<'product' | 'order' | 'hero' | 'visibility' | 'category' | null>(null);
+  const [modal, setModal] = useState<'product' | 'hero' | 'category' | 'settings' | 'order' | 'visibility' | null>(null);
   const [deleting, setDeleting] = useState<Item | null>(null);
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
@@ -112,8 +133,64 @@ export function AdminPanel({ tab }: { tab: Tab }) {
   }
 
   useEffect(() => {
-    loadData();
+    const localAuth = typeof window !== 'undefined' ? sessionStorage.getItem('kiaan_admin_auth') : null;
+    if (localAuth === 'true') {
+      setIsAuthenticated(true);
+      loadData();
+      return;
+    }
+
+    fetch('/api/admin/auth')
+      .then(res => (res.ok ? res.json() : { authenticated: false }))
+      .then(authData => {
+        if (authData.authenticated) {
+          setIsAuthenticated(true);
+          loadData();
+        } else {
+          setIsAuthenticated(false);
+          setReady(true);
+        }
+      })
+      .catch(() => {
+        setIsAuthenticated(false);
+        setReady(true);
+      });
   }, []);
+
+  async function handleLogin(e: React.FormEvent) {
+    e.preventDefault();
+    setLoginError('');
+    setIsLoggingIn(true);
+    try {
+      const res = await fetch('/api/admin/auth', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ password: loginPassword }),
+      });
+      const resData = await res.json();
+      if (!res.ok) {
+        setLoginError(resData.error || 'Incorrect admin password.');
+        setIsLoggingIn(false);
+        return;
+      }
+      sessionStorage.setItem('kiaan_admin_auth', 'true');
+      setIsAuthenticated(true);
+      setLoginPassword('');
+      loadData();
+    } catch {
+      setLoginError('Could not connect to authentication service.');
+    } finally {
+      setIsLoggingIn(false);
+    }
+  }
+
+  async function handleLogout() {
+    sessionStorage.removeItem('kiaan_admin_auth');
+    try {
+      await fetch('/api/admin/auth', { method: 'DELETE' });
+    } catch {}
+    setIsAuthenticated(false);
+  }
 
   useEffect(() => {
     if ((modal && modal !== 'hero' && modal !== 'product') || deleting) {
@@ -254,45 +331,52 @@ export function AdminPanel({ tab }: { tab: Tab }) {
       } catch {
         setError('Failed to reach backend.');
       }
-    } else if (modal === 'order') {
-      if (!value('customer') || !value('details')) return setError('Enter the customer and order details.');
-      const total = Number(value('total'));
-      if (!Number.isFinite(total) || total <= 0) return setError('Enter a valid order total.');
+    } else if (modal === 'settings') {
+      const currentPassword = String(form.get('currentPassword') || '').trim();
+      const newPassword = String(form.get('newPassword') || '').trim();
+      const confirmPassword = String(form.get('confirmPassword') || '').trim();
 
-      try {
-        const res = await fetch('/api/admin/orders', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ customer: value('customer'), details: value('details'), total, status: 'Pending' }),
-        });
-        const result = await res.json();
-        if (!res.ok) return setError(result.error || 'Failed to save order.');
-
-        setData(prev => ({ ...prev, orders: [result, ...prev.orders] }));
-        setMessage('Manual order saved.');
-        close();
-      } catch {
-        setError('Failed to save order.');
+      if (newPassword || confirmPassword) {
+        if (newPassword !== confirmPassword) {
+          return setError('New password and confirm password do not match.');
+        }
+        if (newPassword.length < 4) {
+          return setError('New password must be at least 4 characters long.');
+        }
       }
-    } else if (modal === 'visibility') {
-      const nextSettings: Settings = {
-        ...data.settings,
+
+      const minOrderValue = Math.max(0, Number(form.get('minOrderValue')) || 0);
+      const minOrderQuantity = Math.max(1, Number(form.get('minOrderQuantity')) || 1);
+      const deliveryCharge = Math.max(0, Number(form.get('deliveryCharge')) || 0);
+      const freeDeliveryThreshold = Math.max(0, Number(form.get('freeDeliveryThreshold')) || 0);
+
+      const payload: Record<string, any> = {
+        minOrderValue,
+        minOrderQuantity,
+        deliveryCharge,
+        freeDeliveryThreshold,
         hero: form.has('hero'),
         featured: form.has('featured'),
         reviews: form.has('reviews'),
         newsletter: form.has('newsletter'),
       };
+
+      if (newPassword) {
+        payload.currentPassword = currentPassword;
+        payload.newPassword = newPassword;
+      }
+
       try {
         const res = await fetch('/api/admin/settings', {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(nextSettings),
+          body: JSON.stringify(payload),
         });
         const result = await res.json();
         if (!res.ok) return setError(result.error || 'Failed to save settings.');
 
         setData(prev => ({ ...prev, settings: result }));
-        setMessage('Visibility settings saved.');
+        setMessage('Store settings updated successfully.');
         close();
       } catch {
         setError('Failed to save settings.');
@@ -335,6 +419,57 @@ export function AdminPanel({ tab }: { tab: Tab }) {
   );
   const current = tabs.find(t => t.id === tab)!;
 
+  if (isAuthenticated === false) {
+    return (
+      <div className="admin-login-screen">
+        <div className="admin-login-card">
+          <div className="admin-login-logo">
+            <img
+              src="https://pub-ce8688bc6c654bcfb99716f7c9373bcd.r2.dev/kiaan/brand/kiaan-logo-dark-1793535754883.png"
+              alt="Kiaan Nursery"
+              width="170"
+              height="55"
+              style={{ objectFit: 'contain' }}
+            />
+          </div>
+          <h1>Admin Sign In</h1>
+          <p>Please enter your administrator password to access inventory, orders, and store settings.</p>
+          <form onSubmit={handleLogin}>
+            <div className="admin-login-field">
+              <label htmlFor="admin-pwd">Admin Password</label>
+              <input
+                id="admin-pwd"
+                type="password"
+                required
+                autoFocus
+                placeholder="Enter password (default: admin)"
+                value={loginPassword}
+                onChange={e => {
+                  setLoginPassword(e.target.value);
+                  setLoginError('');
+                }}
+              />
+            </div>
+            {loginError && <p className="admin-login-error">{loginError}</p>}
+            <button
+              type="submit"
+              disabled={isLoggingIn || !loginPassword.trim()}
+              className="admin-button primary"
+              style={{ width: '100%', marginTop: '14px', height: '44px' }}
+            >
+              {isLoggingIn ? 'Verifying…' : 'Sign In to Admin Panel'}
+            </button>
+          </form>
+          <div className="admin-login-footer">
+            <Link href="/" className="admin-back-store">
+              ← Return to Storefront
+            </Link>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="admin-shell">
       <aside className="admin-sidebar">
@@ -368,7 +503,18 @@ export function AdminPanel({ tab }: { tab: Tab }) {
       <div className="admin-workspace">
         <header className="admin-topbar">
           <span>Workspace <span className="admin-divider">/</span> <strong>{current.label}</strong></span>
-          <span className="admin-account"><span className="admin-avatar">K</span><span>Kiaan Nursery<small>Admin workspace</small></span></span>
+          <div className="admin-account" style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+            <span className="admin-avatar">K</span>
+            <span>Kiaan Nursery<small>Admin workspace</small></span>
+            <button
+              type="button"
+              className="admin-logout-btn"
+              onClick={handleLogout}
+              title="Sign out of Admin Panel"
+            >
+              Sign out
+            </button>
+          </div>
         </header>
 
         <main className="admin-main">
@@ -706,11 +852,13 @@ export function AdminPanel({ tab }: { tab: Tab }) {
                     <span className="admin-setting-icon"><Icon name="file" /></span>
                     <span className="admin-tile-arrow"><Icon name="arrow" /></span>
                     <h2>Edit hero banner</h2>
+                    <p>Customize the headline, description and featured hero image on your homepage.</p>
                   </button>
-                  <button className="admin-setting-tile" onClick={() => setModal('visibility')}>
-                    <span className="admin-setting-icon sage"><Icon name="grid" /></span>
+                  <button className="admin-setting-tile" onClick={() => setModal('settings')}>
+                    <span className="admin-setting-icon sage"><Icon name="shield" /></span>
                     <span className="admin-tile-arrow"><Icon name="arrow" /></span>
-                    <h2>Visibility</h2>
+                    <h2>Change Settings</h2>
+                    <p>Manage admin panel password, minimum order limits, and delivery charges.</p>
                   </button>
                 </div>
               )}

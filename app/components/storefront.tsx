@@ -61,12 +61,20 @@ function Brand() {
   );
 }
 
+export type StoreSettingsConfig = {
+  minOrderValue: number;
+  minOrderQuantity: number;
+  deliveryCharge: number;
+  freeDeliveryThreshold: number;
+};
+
 type Cart = Record<string, number>;
 type Panel = 'menu' | 'search' | 'cart' | 'guide' | null;
 type Store = {
   products: Product[];
   cart: Cart;
   wishlist: string[];
+  settings: StoreSettingsConfig;
   add: (product: Product, amount?: number) => void;
   quantity: (id: string, delta: number) => void;
   remove: (id: string) => void;
@@ -149,6 +157,12 @@ export function Storefront({ children }: { children: React.ReactNode }) {
   const [catalog, setCatalog] = useState<Product[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
   const [categoriesOpen, setCategoriesOpen] = useState(false);
+  const [settings, setSettings] = useState<StoreSettingsConfig>({
+    minOrderValue: 0,
+    minOrderQuantity: 1,
+    deliveryCharge: 69,
+    freeDeliveryThreshold: 999,
+  });
   const [cart, setCart] = useState<Cart>({});
   const [wishlist, setWishlist] = useState<string[]>([]);
   const [query, setQuery] = useState('');
@@ -170,6 +184,20 @@ export function Storefront({ children }: { children: React.ReactNode }) {
       .then(res => (res.ok ? res.json() : []))
       .then(cats => {
         if (Array.isArray(cats)) setCategories(cats);
+      })
+      .catch(() => {});
+
+    fetch('/api/settings')
+      .then(res => (res.ok ? res.json() : null))
+      .then(s => {
+        if (s) {
+          setSettings({
+            minOrderValue: Number(s.minOrderValue) || 0,
+            minOrderQuantity: Math.max(1, Number(s.minOrderQuantity) || 1),
+            deliveryCharge: Math.max(0, Number(s.deliveryCharge) || 0),
+            freeDeliveryThreshold: Math.max(0, Number(s.freeDeliveryThreshold) || 0),
+          });
+        }
       })
       .catch(() => {});
   }, []);
@@ -280,7 +308,7 @@ export function Storefront({ children }: { children: React.ReactNode }) {
   const searchResults = catalog.filter(p => p.name.toLowerCase().includes(query.toLowerCase().trim()));
 
   return (
-    <StoreContext.Provider value={{ products: catalog, cart, wishlist, add, quantity, remove, clearCart, favorite, setPanel, setInfo }}>
+    <StoreContext.Provider value={{ products: catalog, cart, wishlist, settings, add, quantity, remove, clearCart, favorite, setPanel, setInfo }}>
       <SiteHeader />
       {children}
       <footer className="footer" id="contact">
@@ -547,11 +575,23 @@ export function NewsletterForm({ footer = false }: { footer?: boolean }) {
 }
 
 function CartContent() {
-  const { cart, quantity, remove, setPanel, products: catalog } = useStore();
+  const { cart, quantity, remove, setPanel, products: catalog, settings } = useStore();
 
   const count = Object.values(cart).reduce((sum, n) => sum + n, 0);
   const items = catalog.filter(p => cart[p.id]);
   const subtotal = items.reduce((sum, p) => sum + p.price * cart[p.id], 0);
+
+  const freeThreshold = settings.freeDeliveryThreshold ?? 999;
+  const deliveryCharge = settings.deliveryCharge ?? 69;
+  const isFreeDelivery = freeThreshold > 0 && subtotal >= freeThreshold;
+  const shippingFee = count > 0 ? (isFreeDelivery ? 0 : deliveryCharge) : 0;
+  const grandTotal = subtotal + shippingFee;
+
+  const minVal = settings.minOrderValue ?? 0;
+  const minQty = settings.minOrderQuantity ?? 1;
+  const belowMinValue = minVal > 0 && subtotal < minVal;
+  const belowMinQty = minQty > 1 && count < minQty;
+  const canCheckout = !belowMinValue && !belowMinQty;
 
   return count === 0 ? (
     <div className="empty-state">
@@ -596,22 +636,50 @@ function CartContent() {
             <dd>{money(subtotal)}</dd>
           </div>
           <div>
-            <dt>Shipping (calculated at checkout)</dt>
-            <dd>—</dd>
+            <dt>Shipping</dt>
+            <dd>{isFreeDelivery ? <span style={{ color: '#1a6224', fontWeight: 700 }}>FREE</span> : money(shippingFee)}</dd>
           </div>
           <div className="summary-total">
             <dt>Total</dt>
-            <dd>{money(subtotal)}</dd>
+            <dd>{money(grandTotal)}</dd>
           </div>
         </dl>
+        {freeThreshold > 0 && !isFreeDelivery && subtotal > 0 && (
+          <p style={{ fontSize: '12px', color: '#1f5018', marginTop: '8px' }}>
+            Add {money(freeThreshold - subtotal)} more for <strong>FREE Delivery</strong>!
+          </p>
+        )}
       </section>
-      <Link
-        href="/checkout"
-        className="checkout-button pill dark"
-        onClick={() => setPanel(null)}
-      >
-        Proceed to Checkout <Icon name="arrow" />
-      </Link>
+
+      {belowMinValue && (
+        <div style={{ background: '#fdf2f2', border: '1px solid #f8c8c8', color: '#a32222', borderRadius: '12px', padding: '10px 14px', margin: '12px 0', fontSize: '13px', fontWeight: 600 }}>
+          Minimum order value is {money(minVal)}. Add {money(minVal - subtotal)} more to proceed.
+        </div>
+      )}
+      {belowMinQty && (
+        <div style={{ background: '#fdf2f2', border: '1px solid #f8c8c8', color: '#a32222', borderRadius: '12px', padding: '10px 14px', margin: '12px 0', fontSize: '13px', fontWeight: 600 }}>
+          Minimum order quantity is {minQty} items. You currently have {count} in cart.
+        </div>
+      )}
+
+      {canCheckout ? (
+        <Link
+          href="/checkout"
+          className="checkout-button pill dark"
+          onClick={() => setPanel(null)}
+        >
+          Proceed to Checkout <Icon name="arrow" />
+        </Link>
+      ) : (
+        <button
+          type="button"
+          disabled
+          className="checkout-button pill dark"
+          style={{ opacity: 0.6, cursor: 'not-allowed' }}
+        >
+          Minimum Order Required <Icon name="arrow" />
+        </button>
+      )}
       <div className="cart-whatsapp-option">
         <a
           className="text-link"

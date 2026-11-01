@@ -1,5 +1,5 @@
 import { NextRequest } from 'next/server';
-import { createOrder, getProductById } from '../../../../lib/server/db';
+import { createOrder, getProductById, getStoreSettings } from '../../../../lib/server/db';
 import { createRazorpayOrder, getRazorpayConfig } from '../../../../lib/server/razorpay';
 
 export const runtime = 'nodejs';
@@ -55,8 +55,31 @@ export async function POST(request: NextRequest) {
       });
     }
 
-    // Free shipping threshold at ₹999
-    const shipping = verifiedSubtotal >= 999 ? 0 : 69;
+    const storeSettings = getStoreSettings();
+
+    // Check minimum order value
+    const minOrderVal = storeSettings.minOrderValue ?? 0;
+    if (minOrderVal > 0 && verifiedSubtotal < minOrderVal) {
+      return Response.json(
+        { error: `Minimum order value is ₹${minOrderVal}. Your current subtotal is ₹${verifiedSubtotal}.` },
+        { status: 400 }
+      );
+    }
+
+    // Check minimum order quantity
+    const minOrderQty = storeSettings.minOrderQuantity ?? 1;
+    const totalItemQty = verifiedItems.reduce((sum, it) => sum + it.quantity, 0);
+    if (minOrderQty > 1 && totalItemQty < minOrderQty) {
+      return Response.json(
+        { error: `Minimum order quantity is ${minOrderQty} items. Your current cart has ${totalItemQty} items.` },
+        { status: 400 }
+      );
+    }
+
+    // Dynamic shipping logic from store settings
+    const freeThreshold = storeSettings.freeDeliveryThreshold ?? 999;
+    const standardCharge = storeSettings.deliveryCharge ?? 69;
+    const shipping = (freeThreshold > 0 && verifiedSubtotal >= freeThreshold) ? 0 : standardCharge;
     const totalAmount = verifiedSubtotal + shipping;
 
     const shortId = crypto.randomUUID().slice(0, 8).toUpperCase();

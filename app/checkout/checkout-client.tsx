@@ -5,8 +5,6 @@ import Link from 'next/link';
 import { useStore, Icon } from '../components/storefront';
 import { money, getProductImageUrl } from '../lib/products';
 
-type PaymentOption = 'razorpay' | 'cod';
-
 interface OrderSuccessData {
   orderId: string;
   paymentId?: string;
@@ -45,7 +43,7 @@ function loadRazorpayScript(): Promise<boolean> {
 }
 
 export function CheckoutClient() {
-  const { cart, products, quantity, remove, clearCart } = useStore();
+  const { cart, products, quantity, remove, clearCart, settings } = useStore();
 
   const [form, setForm] = useState({
     name: '',
@@ -59,21 +57,28 @@ export function CheckoutClient() {
     notes: '',
   });
 
-  const [paymentOption, setPaymentOption] = useState<PaymentOption>('razorpay');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [orderResult, setOrderResult] = useState<OrderSuccessData | null>(null);
 
-  // Cart items
+  // Cart items & subtotal
   const items = products.filter(p => cart[p.id]);
   const subtotal = items.reduce((sum, p) => sum + p.price * cart[p.id], 0);
   const itemCount = Object.values(cart).reduce((sum, n) => sum + n, 0);
 
-  // Shipping logic: Free for >= 999, else 69
-  const freeShippingThreshold = 999;
-  const isFreeShipping = subtotal >= freeShippingThreshold;
-  const shippingFee = isFreeShipping ? 0 : (subtotal > 0 ? 69 : 0);
+  // Dynamic delivery calculations from store settings
+  const freeShippingThreshold = settings?.freeDeliveryThreshold ?? 999;
+  const standardDelivery = settings?.deliveryCharge ?? 69;
+  const isFreeShipping = freeShippingThreshold > 0 && subtotal >= freeShippingThreshold;
+  const shippingFee = itemCount > 0 ? (isFreeShipping ? 0 : standardDelivery) : 0;
   const totalAmount = subtotal + shippingFee;
+
+  // Minimum order rules from store settings
+  const minOrderValue = settings?.minOrderValue ?? 0;
+  const minOrderQuantity = settings?.minOrderQuantity ?? 1;
+  const belowMinValue = minOrderValue > 0 && subtotal < minOrderValue;
+  const belowMinQty = minOrderQuantity > 1 && itemCount < minOrderQuantity;
+  const canCheckout = !belowMinValue && !belowMinQty;
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -81,6 +86,16 @@ export function CheckoutClient() {
 
     if (itemCount === 0) {
       setSubmitError('Your cart is empty. Please add items before checking out.');
+      return;
+    }
+
+    if (belowMinValue) {
+      setSubmitError(`Minimum order value is ${money(minOrderValue)}. Your current cart subtotal is ${money(subtotal)}.`);
+      return;
+    }
+
+    if (belowMinQty) {
+      setSubmitError(`Minimum order quantity is ${minOrderQuantity} items. You currently have ${itemCount} item(s) in your cart.`);
       return;
     }
 
@@ -113,191 +128,134 @@ export function CheckoutClient() {
 
     setIsSubmitting(true);
 
-    // --- OPTION 1: ONLINE PAYMENT VIA RAZORPAY ---
-    if (paymentOption === 'razorpay') {
-      try {
-        const scriptLoaded = await loadRazorpayScript();
-        if (!scriptLoaded) {
-          throw new Error('Failed to load Razorpay payment gateway. Please check your internet connection and try again.');
-        }
-
-        // 1. Create order on our backend
-        const orderRes = await fetch('/api/checkout/razorpay/order', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            name: form.name.trim(),
-            phone: cleanPhone,
-            email: form.email.trim(),
-            address: form.address.trim(),
-            landmark: form.landmark.trim(),
-            city: form.city.trim(),
-            state: form.state.trim(),
-            pincode: cleanPin,
-            notes: form.notes.trim(),
-            items: items.map(p => ({
-              id: p.id,
-              name: p.name,
-              price: p.price,
-              quantity: cart[p.id],
-            })),
-          }),
-        });
-
-        const orderData = await orderRes.json();
-        if (!orderRes.ok || !orderData.success) {
-          throw new Error(orderData.error || 'Failed to initialize Razorpay payment order.');
-        }
-
-        // 2. Open Razorpay Checkout modal
-        type RazorpayPaymentSuccess = {
-          razorpay_payment_id: string;
-          razorpay_order_id: string;
-          razorpay_signature: string;
-        };
-
-        const razorpayOptions = {
-          key: orderData.keyId,
-          amount: orderData.amount,
-          currency: orderData.currency || 'INR',
-          name: 'Kiaan Nursery & Agro Care',
-          description: `Adenium & Nursery Order #${orderData.receipt}`,
-          image: '/images/kiaan-logo-dark.png',
-          order_id: orderData.razorpayOrderId,
-          prefill: {
-            name: form.name.trim(),
-            contact: cleanPhone,
-            email: form.email.trim() || undefined,
-          },
-          notes: {
-            address: orderData.customer.address,
-          },
-          theme: {
-            color: '#214d36', // Brand dark green
-          },
-          modal: {
-            ondismiss: () => {
-              setIsSubmitting(false);
-              setSubmitError('Payment modal was closed. You can retry payment whenever you are ready.');
-            },
-          },
-          handler: async (response: RazorpayPaymentSuccess) => {
-            try {
-              setIsSubmitting(true);
-              setSubmitError(null);
-
-              // 3. Verify signature on backend
-              const verifyRes = await fetch('/api/checkout/razorpay/verify', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                  orderId: orderData.orderId,
-                  razorpayOrderId: response.razorpay_order_id,
-                  razorpayPaymentId: response.razorpay_payment_id,
-                  razorpaySignature: response.razorpay_signature,
-                }),
-              });
-
-              const verifyData = await verifyRes.json();
-              if (!verifyRes.ok || !verifyData.success) {
-                throw new Error(verifyData.error || 'Payment verification failed. Please contact nursery support.');
-              }
-
-              // Success! Show confirmation
-              setOrderResult({
-                orderId: orderData.orderId,
-                paymentId: response.razorpay_payment_id,
-                paymentMethod: 'Razorpay Online (UPI / Cards / NetBanking)',
-                customer: orderData.customer,
-                items: orderData.items,
-                subtotal: orderData.subtotal,
-                shipping: orderData.shipping,
-                total: orderData.total,
-                date: new Date().toISOString(),
-              });
-
-              clearCart();
-              window.scrollTo({ top: 0, behavior: 'smooth' });
-            } catch (err) {
-              setSubmitError(err instanceof Error ? err.message : 'Payment verification failed.');
-            } finally {
-              setIsSubmitting(false);
-            }
-          },
-        };
-
-        const RazorpayConstructor = (window as unknown as { Razorpay: new (opts: unknown) => { open: () => void; on: (event: string, cb: (res: unknown) => void) => void } }).Razorpay;
-        const rzp = new RazorpayConstructor(razorpayOptions);
-        rzp.on('payment.failed', (failRes: unknown) => {
-          const failure = failRes as { error?: { description?: string } };
-          setSubmitError(`Payment failed: ${failure.error?.description || 'Transaction was declined.'}`);
-          setIsSubmitting(false);
-        });
-        rzp.open();
-      } catch (err) {
-        setSubmitError(err instanceof Error ? err.message : 'An error occurred during payment initiation.');
-        setIsSubmitting(false);
-      }
-      return;
-    }
-
-    // --- OPTION 2: CASH ON DELIVERY ---
+    // Online Payment via Razorpay (Sole Payment Method)
     try {
-      const orderPayload = {
-        name: form.name.trim(),
-        phone: cleanPhone,
-        email: form.email.trim(),
-        address: form.address.trim(),
-        landmark: form.landmark.trim(),
-        city: form.city.trim(),
-        state: form.state.trim(),
-        pincode: cleanPin,
-        notes: form.notes.trim(),
-        paymentMethod: 'Cash on Delivery (COD)',
-        items: items.map(p => ({
-          id: p.id,
-          name: p.name,
-          price: p.price,
-          quantity: cart[p.id],
-          image: p.image,
-        })),
-        subtotal,
-        shipping: shippingFee,
-        total: totalAmount,
-      };
+      const scriptLoaded = await loadRazorpayScript();
+      if (!scriptLoaded) {
+        throw new Error('Failed to load Razorpay payment gateway. Please check your internet connection and try again.');
+      }
 
-      const res = await fetch('/api/checkout', {
+      // 1. Create order on our backend
+      const orderRes = await fetch('/api/checkout/razorpay/order', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(orderPayload),
-      });
-
-      const data = await res.json();
-      if (!res.ok) {
-        throw new Error(data.error || 'Failed to place order. Please try again.');
-      }
-
-      setOrderResult({
-        orderId: data.orderId,
-        paymentMethod: 'Cash on Delivery (COD)',
-        customer: {
+        body: JSON.stringify({
           name: form.name.trim(),
           phone: cleanPhone,
           email: form.email.trim(),
-          address: data.customer?.address || `${form.address}, ${form.city} - ${cleanPin}`,
-        },
-        items: orderPayload.items,
-        subtotal,
-        shipping: shippingFee,
-        total: totalAmount,
-        date: data.date || new Date().toISOString(),
+          address: form.address.trim(),
+          landmark: form.landmark.trim(),
+          city: form.city.trim(),
+          state: form.state.trim(),
+          pincode: cleanPin,
+          notes: form.notes.trim(),
+          items: items.map(p => ({
+            id: p.id,
+            name: p.name,
+            price: p.price,
+            quantity: cart[p.id],
+          })),
+        }),
       });
 
-      clearCart();
-      window.scrollTo({ top: 0, behavior: 'smooth' });
+      const orderData = await orderRes.json();
+      if (!orderRes.ok || !orderData.success) {
+        throw new Error(orderData.error || 'Failed to initialize Razorpay payment order.');
+      }
+
+      // 2. Open Razorpay Checkout modal
+      type RazorpayPaymentSuccess = {
+        razorpay_payment_id: string;
+        razorpay_order_id: string;
+        razorpay_signature: string;
+      };
+
+      const razorpayOptions = {
+        key: orderData.keyId,
+        amount: orderData.amount,
+        currency: orderData.currency || 'INR',
+        name: 'Kiaan Nursery & Agro Care',
+        description: `Adenium & Nursery Order #${orderData.receipt}`,
+        image: '/images/kiaan-logo-dark.png',
+        order_id: orderData.razorpayOrderId,
+        prefill: {
+          name: form.name.trim(),
+          contact: cleanPhone,
+          email: form.email.trim() || undefined,
+        },
+        notes: {
+          address: orderData.customer.address,
+        },
+        theme: {
+          color: '#214d36', // Brand dark green
+        },
+        modal: {
+          ondismiss: () => {
+            setIsSubmitting(false);
+            setSubmitError('Payment was not completed. You can retry whenever you are ready.');
+          },
+        },
+        handler: async (response: RazorpayPaymentSuccess) => {
+          try {
+            setIsSubmitting(true);
+            setSubmitError(null);
+
+            // 3. Verify signature on backend
+            const verifyRes = await fetch('/api/checkout/razorpay/verify', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                orderId: orderData.orderId,
+                razorpayOrderId: response.razorpay_order_id,
+                razorpayPaymentId: response.razorpay_payment_id,
+                razorpaySignature: response.razorpay_signature,
+              }),
+            });
+
+            const verifyData = await verifyRes.json();
+            if (!verifyRes.ok || !verifyData.success) {
+              throw new Error(verifyData.error || 'Payment verification failed. Please contact nursery support.');
+            }
+
+            // Success! Show confirmation
+            setOrderResult({
+              orderId: orderData.orderId,
+              paymentId: response.razorpay_payment_id,
+              paymentMethod: 'Razorpay Online (UPI / Cards / NetBanking)',
+              customer: orderData.customer,
+              items: orderData.items,
+              subtotal: orderData.subtotal,
+              shipping: orderData.shipping,
+              total: orderData.total,
+              date: new Date().toISOString(),
+            });
+
+            clearCart();
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+          } catch (err) {
+            setSubmitError(err instanceof Error ? err.message : 'Payment verification failed.');
+          } finally {
+            setIsSubmitting(false);
+          }
+        },
+      };
+
+      const RazorpayConstructor = (window as unknown as {
+        Razorpay: new (opts: unknown) => {
+          open: () => void;
+          on: (event: string, cb: (res: unknown) => void) => void;
+        };
+      }).Razorpay;
+
+      const rzp = new RazorpayConstructor(razorpayOptions);
+      rzp.on('payment.failed', (failRes: unknown) => {
+        const failure = failRes as { error?: { description?: string } };
+        setSubmitError(`Payment failed: ${failure.error?.description || 'Transaction was declined.'}`);
+        setIsSubmitting(false);
+      });
+      rzp.open();
     } catch (err) {
-      setSubmitError(err instanceof Error ? err.message : 'An unexpected error occurred.');
-    } finally {
+      setSubmitError(err instanceof Error ? err.message : 'An error occurred during payment initiation.');
       setIsSubmitting(false);
     }
   }
@@ -305,7 +263,6 @@ export function CheckoutClient() {
   // --- ORDER SUCCESS VIEW ---
   if (orderResult) {
     const shortId = orderResult.orderId.slice(0, 8).toUpperCase();
-    const isOnlinePaid = Boolean(orderResult.paymentId);
     const whatsappText = `Hello Kiaan Nursery & Agro Care!\nI have placed an order on your site.\n\n*Order ID:* #KIAAN-${shortId}\n*Customer:* ${orderResult.customer.name}\n*Phone:* ${orderResult.customer.phone}\n*Payment Method:* ${orderResult.paymentMethod}${orderResult.paymentId ? `\n*Payment ID:* ${orderResult.paymentId}` : ''}\n*Items:*\n${orderResult.items.map(i => `• ${i.name} × ${i.quantity} (₹${i.price * i.quantity})`).join('\n')}\n*Total:* ₹${orderResult.total}\n*Delivery Address:* ${orderResult.customer.address}\n\nPlease confirm availability and dispatch details. Thank you!`;
 
     return (
@@ -318,12 +275,10 @@ export function CheckoutClient() {
               </svg>
             </div>
 
-            <span className="success-tag">ORDER CONFIRMED</span>
+            <span className="success-tag">PAYMENT VERIFIED &bull; ORDER CONFIRMED</span>
             <h1 className="success-title">Thank You, {orderResult.customer.name}!</h1>
             <p className="success-subtitle">
-              {isOnlinePaid
-                ? 'Your payment was successfully verified. Your healthy plants and care essentials are being prepped for dispatch at our Habra nursery.'
-                : 'Your order has been received by our nursery team in Habra and will be dispatched with botanical packaging.'}
+              Your payment was successfully received and verified via Razorpay. Your healthy plants and care essentials are being prepped for dispatch at our Habra nursery.
             </p>
 
             <div className="order-id-badge">
@@ -345,9 +300,9 @@ export function CheckoutClient() {
                 </div>
               )}
               <div className="summary-row">
-                <span>Order Status</span>
-                <span className={`status-badge ${isOnlinePaid ? 'paid' : 'pending'}`} style={isOnlinePaid ? { background: '#d6edd4', color: '#135818', padding: '3px 9px', borderRadius: '6px', fontWeight: 700 } : undefined}>
-                  {isOnlinePaid ? '✓ Paid & Confirmed' : 'Received • Cash on Delivery'}
+                <span>Payment Status</span>
+                <span className="status-badge paid" style={{ background: '#d6edd4', color: '#135818', padding: '3px 9px', borderRadius: '6px', fontWeight: 700 }}>
+                  ✓ Paid &amp; Confirmed
                 </span>
               </div>
               <div className="summary-row">
@@ -355,7 +310,7 @@ export function CheckoutClient() {
                 <span className="summary-address">{orderResult.customer.address}</span>
               </div>
               <div className="summary-row">
-                <span>Total Amount</span>
+                <span>Total Amount Paid</span>
                 <strong className="summary-price">{money(orderResult.total)}</strong>
               </div>
             </div>
@@ -456,6 +411,24 @@ export function CheckoutClient() {
           <div className="checkout-error-banner" role="alert">
             <Icon name="close" />
             <span>{submitError}</span>
+          </div>
+        )}
+
+        {belowMinValue && (
+          <div className="checkout-error-banner" role="alert">
+            <Icon name="close" />
+            <span>
+              Minimum order value is {money(minOrderValue)}. Please add {money(minOrderValue - subtotal)} more to your cart to checkout.
+            </span>
+          </div>
+        )}
+
+        {belowMinQty && (
+          <div className="checkout-error-banner" role="alert">
+            <Icon name="close" />
+            <span>
+              Minimum order quantity is {minOrderQuantity} items. You currently have {itemCount} item(s) in your cart.
+            </span>
           </div>
         )}
 
@@ -590,50 +563,40 @@ export function CheckoutClient() {
               </div>
             </section>
 
-            {/* Step 3: Payment Options (Razorpay Online vs COD) */}
+            {/* Step 3: Payment Method (Razorpay Online Only) */}
             <section className="form-card">
               <div className="form-card-header">
                 <span className="step-number">3</span>
                 <h2>Payment Method</h2>
               </div>
-              <div className="payment-options-grid">
-                <label className={`payment-card ${paymentOption === 'razorpay' ? 'selected' : ''}`}>
-                  <input
-                    type="radio"
-                    name="paymentMethod"
-                    value="razorpay"
-                    checked={paymentOption === 'razorpay'}
-                    onChange={() => setPaymentOption('razorpay')}
-                  />
-                  <div className="payment-card-content">
-                    <div className="payment-card-title">
-                      <strong>Razorpay Online Payment (UPI, Cards, NetBanking)</strong>
-                      <span className="payment-badge green">Instant &bull; Recommended</span>
-                    </div>
-                    <p>
-                      Pay securely using Google Pay, PhonePe, Paytm, BHIM UPI, Debit/Credit Card, or NetBanking. Instant automated confirmation.
-                    </p>
+              <div className="razorpay-only-card">
+                <div className="razorpay-card-header">
+                  <div className="razorpay-brand-row">
+                    <span className="razorpay-logo-badge">
+                      <Icon name="shield" />
+                      <span>Razorpay Secure Online Payment</span>
+                    </span>
+                    <span className="payment-badge green">Instant &bull; 100% Online</span>
                   </div>
-                </label>
+                  <strong>UPI, Debit / Credit Cards &amp; NetBanking</strong>
+                </div>
 
-                <label className={`payment-card ${paymentOption === 'cod' ? 'selected' : ''}`}>
-                  <input
-                    type="radio"
-                    name="paymentMethod"
-                    value="cod"
-                    checked={paymentOption === 'cod'}
-                    onChange={() => setPaymentOption('cod')}
-                  />
-                  <div className="payment-card-content">
-                    <div className="payment-card-title">
-                      <strong>Cash on Delivery (COD)</strong>
-                      <span className="payment-badge">Pay on Delivery</span>
-                    </div>
-                    <p>
-                      Pay comfortably via Cash or UPI to the delivery courier when your plants arrive at your doorstep.
-                    </p>
-                  </div>
-                </label>
+                <p className="razorpay-card-desc">
+                  Pay securely using Google Pay, PhonePe, Paytm, BHIM UPI, Debit/Credit Cards (Visa, Mastercard, RuPay), or NetBanking. Instant automated confirmation.
+                </p>
+
+                <div className="payment-methods-pills">
+                  <span className="pay-method-pill">⚡ UPI / QR</span>
+                  <span className="pay-method-pill">Google Pay</span>
+                  <span className="pay-method-pill">PhonePe</span>
+                  <span className="pay-method-pill">Paytm</span>
+                  <span className="pay-method-pill">Visa / Mastercard / RuPay</span>
+                  <span className="pay-method-pill">NetBanking</span>
+                </div>
+
+                <div className="cod-disabled-notice">
+                  <span>ℹ️ Cash on Delivery (COD) is not available. To guarantee living plant freshness and expedited dispatch from Habra nursery, all orders are paid online securely.</span>
+                </div>
               </div>
             </section>
 
@@ -641,19 +604,17 @@ export function CheckoutClient() {
             <div className="checkout-submit-wrap">
               <button
                 type="submit"
-                disabled={isSubmitting}
+                disabled={isSubmitting || !canCheckout}
                 className="checkout-place-order-btn pill dark"
+                style={!canCheckout ? { opacity: 0.6, cursor: 'not-allowed' } : undefined}
               >
                 {isSubmitting ? (
-                  <span>Processing Payment…</span>
-                ) : paymentOption === 'razorpay' ? (
-                  <>
-                    <span>Pay {money(totalAmount)} with Razorpay</span>
-                    <Icon name="arrow" />
-                  </>
+                  <span>Connecting to Razorpay…</span>
+                ) : !canCheckout ? (
+                  <span>Minimum Order Requirements Not Met</span>
                 ) : (
                   <>
-                    <span>Place Cash on Delivery Order • {money(totalAmount)}</span>
+                    <span>Pay {money(totalAmount)} with Razorpay</span>
                     <Icon name="arrow" />
                   </>
                 )}
@@ -661,11 +622,7 @@ export function CheckoutClient() {
 
               <div className="checkout-security-guarantee">
                 <Icon name="shield" />
-                <span>
-                  {paymentOption === 'razorpay'
-                    ? '128-bit Encrypted Razorpay Gateway • 100% Secure • Instant Dispatch Queue'
-                    : 'Pay on Delivery • 100% Safe Botanical Transit • Hand-packaged at Habra'}
-                </span>
+                <span>100% Secure 128-bit Encrypted Razorpay Gateway &bull; Safe Botanical Packaging from Habra</span>
               </div>
             </div>
           </form>
@@ -690,19 +647,11 @@ export function CheckoutClient() {
                       </div>
                       <div className="checkout-item-details">
                         <h4>{p.name}</h4>
-                        <p className="checkout-item-sub">
-                          Pot: 4–5 inch &bull; {p.categoryId === 'agrocare' ? 'Plant Care' : 'Adenium'}
-                        </p>
-                        <div className="checkout-item-calc">
-                          <span className="item-unit-price">{money(p.price)} &times; {qty}</span>
-                          <strong className="item-line-price">{money(p.price * qty)}</strong>
-                        </div>
-                      </div>
-                      <div className="checkout-item-actions">
-                        <div className="item-qty-pills">
+                        <p className="checkout-item-unit">{money(p.price)} each</p>
+                        <div className="checkout-item-qty-bar">
                           <button
                             type="button"
-                            aria-label="Decrease quantity"
+                            aria-label={`Decrease ${p.name}`}
                             onClick={() => quantity(p.id, -1)}
                           >
                             <Icon name="minus" />
@@ -710,59 +659,54 @@ export function CheckoutClient() {
                           <span>{qty}</span>
                           <button
                             type="button"
-                            aria-label="Increase quantity"
-                            disabled={qty >= 99}
+                            aria-label={`Increase ${p.name}`}
                             onClick={() => quantity(p.id, 1)}
+                            disabled={qty >= 99}
                           >
                             <Icon name="plus" />
                           </button>
+                          <button
+                            type="button"
+                            className="checkout-item-del"
+                            aria-label={`Remove ${p.name}`}
+                            onClick={() => remove(p.id)}
+                          >
+                            <Icon name="trash" />
+                          </button>
                         </div>
-                        <button
-                          type="button"
-                          className="item-remove-link"
-                          aria-label={`Remove ${p.name}`}
-                          onClick={() => remove(p.id)}
-                        >
-                          <Icon name="trash" />
-                        </button>
                       </div>
+                      <strong className="checkout-item-total">{money(p.price * qty)}</strong>
                     </article>
                   );
                 })}
               </div>
 
               {/* Free shipping indicator */}
-              {!isFreeShipping && (
+              {freeShippingThreshold > 0 && !isFreeShipping && subtotal > 0 && (
                 <div className="free-shipping-progress">
-                  <div className="free-shipping-text">
-                    <Icon name="truck" />
-                    <span>
-                      Add <strong>{money(freeShippingThreshold - subtotal)}</strong> more for <strong>FREE Delivery</strong>
-                    </span>
+                  <div className="progress-info">
+                    <span>Add {money(freeShippingThreshold - subtotal)} more for <strong>FREE Delivery</strong></span>
                   </div>
-                  <div className="progress-bar-track">
+                  <div className="progress-bar">
                     <div
-                      className="progress-bar-fill"
+                      className="progress-fill"
                       style={{ width: `${Math.min(100, Math.round((subtotal / freeShippingThreshold) * 100))}%` }}
                     />
                   </div>
                 </div>
               )}
 
-              {/* Price Breakdown */}
-              <dl className="checkout-breakdown">
+              {/* Price calculations */}
+              <dl className="summary-breakdown">
                 <div className="breakdown-row">
-                  <dt>Subtotal ({itemCount} {itemCount === 1 ? 'item' : 'items'})</dt>
+                  <dt>Items Subtotal</dt>
                   <dd>{money(subtotal)}</dd>
                 </div>
                 <div className="breakdown-row">
-                  <dt>
-                    <span>Delivery Charges</span>
-                    {isFreeShipping && <small className="free-tag">FREE</small>}
-                  </dt>
+                  <dt>Shipping</dt>
                   <dd>
                     {isFreeShipping ? (
-                      <span className="free-val">₹0</span>
+                      <span className="free-shipping-tag">FREE</span>
                     ) : (
                       money(shippingFee)
                     )}
@@ -774,24 +718,20 @@ export function CheckoutClient() {
                 </div>
               </dl>
 
-              {/* Support Hotline Box */}
-              <div className="checkout-support-card">
-                <div className="support-card-content">
-                  <Icon name="support" />
-                  <div>
-                    <strong>Need help with your order?</strong>
-                    <p>Call or WhatsApp our nursery specialists in Habra.</p>
-                  </div>
+              {/* Trust Badges */}
+              <div className="checkout-trust-badges">
+                <div className="trust-badge">
+                  <Icon name="flower" />
+                  <span>Healthy Root &amp; Caudex Guarantee</span>
                 </div>
-                <a
-                  href="https://wa.me/916289417338"
-                  target="_blank"
-                  rel="noreferrer"
-                  className="support-phone-link"
-                >
-                  <Icon name="phone" />
-                  +91 62894 17338
-                </a>
+                <div className="trust-badge">
+                  <Icon name="truck" />
+                  <span>Doorstep Delivery Across India</span>
+                </div>
+                <div className="trust-badge">
+                  <Icon name="support" />
+                  <span>Complete WhatsApp Care Advice</span>
+                </div>
               </div>
             </div>
           </aside>
