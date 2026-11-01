@@ -2,6 +2,7 @@ export type InventoryProduct = {
   id: string;
   name: string;
   price: number;
+  originalPrice?: number;
   stock: number;
   image: string;
   images: string[];

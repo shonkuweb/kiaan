@@ -6,6 +6,7 @@ export type Product = {
   id: string;
   name: string;
   price: number;
+  originalPrice?: number;
   stock: number;
   image: string;
   images: string[];
@@ -63,6 +64,7 @@ type DbProductRow = {
   id: string;
   name: string;
   price: number;
+  original_price?: number | null;
   stock: number;
   image: string;
   images: string;
@@ -387,6 +389,11 @@ export function getDatabase(): DatabaseSync {
     // Column already exists
   }
   try {
+    db.exec('ALTER TABLE products ADD COLUMN original_price REAL DEFAULT NULL;');
+  } catch {
+    // Column already exists
+  }
+  try {
     db.prepare('UPDATE categories SET image = ? WHERE id = ? AND (image IS NULL OR image = "")').run('/images/collection.webp', 'adenium');
     db.prepare('UPDATE categories SET image = ? WHERE id = ? AND (image IS NULL OR image = "")').run('/images/essentials.webp', 'agrocare');
   } catch {
@@ -465,6 +472,7 @@ function rowToProduct(row: DbProductRow): Product {
     id: row.id,
     name: row.name,
     price: Number(row.price),
+    originalPrice: row.original_price != null && Number(row.original_price) > 0 ? Number(row.original_price) : undefined,
     stock: Number(row.stock),
     image: row.image,
     images: images.length > 0 ? images : row.image ? [row.image] : [],
@@ -519,6 +527,7 @@ export function createProduct(data: {
   id?: string;
   name: string;
   price: number;
+  originalPrice?: number;
   stock: number;
   image?: string;
   images?: string[];
@@ -539,19 +548,21 @@ export function createProduct(data: {
   const now = new Date().toISOString();
   const images = data.images && data.images.length > 0 ? data.images : data.image ? [data.image] : [];
   const primaryImage = images[0] || data.image || '';
+  const originalPrice = data.originalPrice !== undefined && Number(data.originalPrice) > 0 ? Number(data.originalPrice) : null;
 
   const stmt = db.prepare(`
     INSERT INTO products (
-      id, name, price, stock, image, images, description, category_id,
+      id, name, price, original_price, stock, image, images, description, category_id,
       is_featured, color, rating, reviews, pot_size, plant_height, details,
       shipping_info, returns_info, created_at, updated_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `);
 
   stmt.run(
     id,
     data.name.trim(),
     Number(data.price),
+    originalPrice,
     Number(data.stock),
     primaryImage,
     JSON.stringify(images),
@@ -581,6 +592,9 @@ export function updateProduct(id: string, data: Partial<Product>): Product | nul
   const now = new Date().toISOString();
   const name = data.name !== undefined ? data.name.trim() : existing.name;
   const price = data.price !== undefined ? Number(data.price) : existing.price;
+  const originalPrice = data.originalPrice !== undefined
+    ? (Number(data.originalPrice) > 0 ? Number(data.originalPrice) : null)
+    : (existing.originalPrice || null);
   const stock = data.stock !== undefined ? Number(data.stock) : existing.stock;
   const images = data.images !== undefined ? data.images : existing.images;
   const primaryImage = images[0] || (data.image !== undefined ? data.image : existing.image);
@@ -600,6 +614,7 @@ export function updateProduct(id: string, data: Partial<Product>): Product | nul
     UPDATE products SET
       name = ?,
       price = ?,
+      original_price = ?,
       stock = ?,
       image = ?,
       images = ?,
@@ -621,6 +636,7 @@ export function updateProduct(id: string, data: Partial<Product>): Product | nul
   stmt.run(
     name,
     price,
+    originalPrice,
     stock,
     primaryImage,
     JSON.stringify(images),

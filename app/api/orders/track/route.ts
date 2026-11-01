@@ -29,13 +29,13 @@ function parseOrderPayload(order: ReturnType<typeof trackOrderByPhoneAndId>) {
     }
   }
 
-  // Determine active step index (0-based) for visual status tracker
-  // 0: Order Placed / Confirmed
-  // 1: Plant Health Inspection & Selection
+  // Determine active step index (0-based) for visual status tracker:
+  // 0: Order Confirmed
+  // 1: Plant Selection
   // 2: Botanical Packaging
-  // 3: Dispatched & In Transit
+  // 3: Dispatched
   // 4: Delivered
-  const statusLower = order.status.toLowerCase();
+  const statusLower = (order.status || '').toLowerCase();
   let stepIndex = 0;
   if (statusLower.includes('deliver')) {
     stepIndex = 4;
@@ -43,9 +43,9 @@ function parseOrderPayload(order: ReturnType<typeof trackOrderByPhoneAndId>) {
     stepIndex = 3;
   } else if (statusLower.includes('pack')) {
     stepIndex = 2;
-  } else if (statusLower.includes('process') || statusLower.includes('prep') || statusLower.includes('select')) {
+  } else if (statusLower.includes('select') || statusLower.includes('plant') || statusLower.includes('process') || statusLower.includes('prep')) {
     stepIndex = 1;
-  } else if (statusLower.includes('confirm') || statusLower.includes('paid')) {
+  } else {
     stepIndex = 0;
   }
 

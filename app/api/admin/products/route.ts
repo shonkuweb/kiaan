@@ -28,6 +28,7 @@ export async function POST(request: NextRequest) {
     const name = String(body.name || '').trim();
     const categoryId = String(body.categoryId || '').trim();
     const price = Number(body.price);
+    const originalPrice = body.originalPrice !== undefined && body.originalPrice !== '' && Number(body.originalPrice) > 0 ? Number(body.originalPrice) : undefined;
     const stock = Number(body.stock);
     const description = String(body.description || '').trim();
     const images = Array.isArray(body.images) ? body.images : [];
@@ -60,6 +61,7 @@ export async function POST(request: NextRequest) {
       name,
       categoryId,
       price,
+      originalPrice,
       stock,
       description,
       images,
@@ -101,6 +103,9 @@ export async function PUT(request: NextRequest) {
     const name = body.name !== undefined ? String(body.name).trim() : existing.name;
     const categoryId = body.categoryId !== undefined ? String(body.categoryId).trim() : existing.categoryId;
     const price = body.price !== undefined ? Number(body.price) : existing.price;
+    const originalPrice = body.originalPrice !== undefined
+      ? (body.originalPrice === '' || body.originalPrice === null || Number(body.originalPrice) <= 0 ? undefined : Number(body.originalPrice))
+      : existing.originalPrice;
     const stock = body.stock !== undefined ? Number(body.stock) : existing.stock;
     const description = body.description !== undefined ? String(body.description).trim() : existing.description;
     const images = Array.isArray(body.images) ? body.images : existing.images;
@@ -132,6 +137,7 @@ export async function PUT(request: NextRequest) {
       name,
       categoryId,
       price,
+      originalPrice,
       stock,
       description,
       images,

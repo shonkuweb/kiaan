@@ -51,7 +51,7 @@ function Brand() {
   return (
     <Link className="brand" href="/" aria-label="Kiaan Nursery home" onClick={() => { setPanel(null); setInfo(null); }}>
       <img
-        src="https://pub-ce8688bc6c654bcfb99716f7c9373bcd.r2.dev/kiaan/brand/kiaan-logo-1793535536482.png"
+        src="/images/kiaan-logo.png"
         alt="Kiaan Nursery & Agrocare"
         className="brand-logo-img"
         width="170"
@@ -116,7 +116,19 @@ export function ProductCard({ product, compact = false, collection = false }: { 
       <div className="product-details">
         <h3><Link href={`/products/${product.id}`}>{product.name}</Link></h3>
         {collection && <p className="product-rating"><span>★</span> {(product.rating || 4.9).toFixed(1)} ({product.reviews || 0})</p>}
-        <p className="price">{money(product.price)}</p>
+        <div className="product-price-wrapper">
+          {product.originalPrice && product.originalPrice > product.price ? (
+            <div className="product-price-split">
+              <span className="price-offer">{money(product.price)}</span>
+              <span className="price-original">{money(product.originalPrice)}</span>
+              <span className="price-discount-pill">
+                {Math.round(((product.originalPrice - product.price) / product.originalPrice) * 100)}% OFF
+              </span>
+            </div>
+          ) : (
+            <p className="price">{money(product.price)}</p>
+          )}
+        </div>
         {!compact && (
           <button className="add-cart" onClick={() => add(product)}>
             <Icon name="cart" />Add to Cart
@@ -670,7 +682,7 @@ function CartContent() {
         ))}
       </div>
       <section className="order-summary">
-        <img src="https://pub-ce8688bc6c654bcfb99716f7c9373bcd.r2.dev/kiaan/brand/kiaan-logo-1793535536482.png" alt="" className="summary-watermark" />
+        <img src="/images/kiaan-logo.png" alt="" className="summary-watermark" />
         <h3>Order Summary</h3>
         <dl>
           <div>

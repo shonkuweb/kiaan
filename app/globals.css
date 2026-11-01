@@ -2970,3 +2970,81 @@ body:has(.floating-cart-btn) .toast {
 
 
 
+
+/* ===================================================
+   STOREFRONT PRODUCT ORIGINAL & OFFER PRICE STYLES
+   =================================================== */
+
+.product-price-wrapper {
+  margin: 6px 0;
+}
+
+.product-price-split {
+  display: flex;
+  align-items: baseline;
+  gap: 7px;
+  flex-wrap: wrap;
+}
+
+.price-offer {
+  font-size: clamp(18px, 2.5vw, 26px);
+  font-weight: 700;
+  color: #103817;
+  line-height: 1.1;
+}
+
+.price-original {
+  font-size: clamp(13px, 1.8vw, 16px);
+  font-weight: 500;
+  color: #94a3b8;
+  text-decoration: line-through;
+  text-decoration-thickness: 1.5px;
+}
+
+.price-discount-pill {
+  font-size: 10px;
+  font-weight: 700;
+  background: #fef2f2;
+  color: #dc2626;
+  border: 1px solid #fecaca;
+  border-radius: 999px;
+  padding: 2px 7px;
+  line-height: 1.2;
+  letter-spacing: 0.2px;
+}
+
+/* Product Details Page Price */
+.detail-price-split-wrap {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin: 8px 0;
+}
+
+.detail-offer-price {
+  font-size: clamp(28px, 4vw, 42px);
+  font-weight: 800;
+  color: #103817;
+  font-family: Georgia, "Times New Roman", serif;
+  line-height: 1;
+}
+
+.detail-original-price {
+  font-size: clamp(17px, 2.2vw, 22px);
+  font-weight: 500;
+  color: #94a3b8;
+  text-decoration: line-through;
+  text-decoration-thickness: 2px;
+}
+
+.detail-discount-tag {
+  font-size: 13px;
+  font-weight: 700;
+  background: #fee2e2;
+  color: #b91c1c;
+  border: 1px solid #fca5a5;
+  border-radius: 6px;
+  padding: 3px 9px;
+  letter-spacing: 0.3px;
+}

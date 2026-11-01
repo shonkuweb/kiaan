@@ -64,6 +64,8 @@ export function ProductEditor({ product, categories, categoryId, onClose, onSave
     const form = new FormData(event.currentTarget);
     const text = (key: string) => String(form.get(key) || '').trim();
     const price = Number(text('price'));
+    const origPriceText = text('originalPrice');
+    const originalPrice = origPriceText && Number(origPriceText) > 0 ? Number(origPriceText) : undefined;
     const stock = Number(text('stock'));
     if (!text('name') || !categories.some(c => c.id === text('categoryId'))) {
       return setError('Enter a name and choose a category.');
@@ -82,6 +84,7 @@ export function ProductEditor({ product, categories, categoryId, onClose, onSave
         name: text('name'),
         categoryId: text('categoryId'),
         price,
+        originalPrice,
         stock,
         image: images[0] || product?.image || '',
         images,
@@ -185,14 +188,40 @@ export function ProductEditor({ product, categories, categoryId, onClose, onSave
 
             <div className="admin-form-grid">
               <label>
-                Price (₹)
-                <input name="price" type="number" min="0.01" max="10000000" step="0.01" defaultValue={product?.price} required disabled={uploading} />
+                <span>Original Price / MRP (₹)</span>
+                <input
+                  name="originalPrice"
+                  type="number"
+                  min="0"
+                  max="10000000"
+                  step="0.01"
+                  defaultValue={product?.originalPrice ?? ''}
+                  placeholder="e.g. 999"
+                  disabled={uploading}
+                />
+                <small style={{ fontSize: '11px', color: '#768571' }}>Original crossed-out price</small>
               </label>
               <label>
-                Stock quantity
-                <input name="stock" type="number" min="0" max="1000000" step="1" defaultValue={product?.stock ?? 0} required disabled={uploading} />
+                <span>Offer Price / Selling Price (₹) <span style={{ color: '#b91c1c' }}>*</span></span>
+                <input
+                  name="price"
+                  type="number"
+                  min="0.01"
+                  max="10000000"
+                  step="0.01"
+                  defaultValue={product?.price}
+                  required
+                  placeholder="e.g. 599"
+                  disabled={uploading}
+                />
+                <small style={{ fontSize: '11px', color: '#768571' }}>Actual customer selling price</small>
               </label>
             </div>
+
+            <label style={{ marginTop: '14px' }}>
+              <span>Stock quantity (available units) <span style={{ color: '#b91c1c' }}>*</span></span>
+              <input name="stock" type="number" min="0" max="1000000" step="1" defaultValue={product?.stock ?? 0} required disabled={uploading} />
+            </label>
 
             <label>
               Short description

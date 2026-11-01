@@ -342,7 +342,17 @@ export function ProductDetails({
           <span>{(product.rating || 4.9).toFixed(1)} ({product.reviews || 0} reviews)</span>
         </div>
         <div className="detail-price-row">
-          <p className="detail-price">{money(product.price)}</p>
+          {product.originalPrice && product.originalPrice > product.price ? (
+            <div className="detail-price-split-wrap">
+              <span className="detail-offer-price">{money(product.price)}</span>
+              <span className="detail-original-price">{money(product.originalPrice)}</span>
+              <span className="detail-discount-tag">
+                {Math.round(((product.originalPrice - product.price) / product.originalPrice) * 100)}% OFF
+              </span>
+            </div>
+          ) : (
+            <p className="detail-price">{money(product.price)}</p>
+          )}
           <span className={`stock-badge ${product.stock <= 0 ? 'out-of-stock' : ''}`}>
             <Icon name="check" />
             {product.stock > 0 ? (product.stock <= 5 ? `Only ${product.stock} left` : 'In Stock') : 'Out of Stock'}

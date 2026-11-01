@@ -496,7 +496,7 @@ export function HomeClient({
         <section className="newsletter">
           <div className="newsletter-heading">
             <img
-              src="https://pub-ce8688bc6c654bcfb99716f7c9373bcd.r2.dev/kiaan/brand/kiaan-logo-dark-1793535754883.png"
+              src="/images/kiaan-logo-dark.png"
               alt="Kiaan Nursery"
               width="140"
               height="60"
