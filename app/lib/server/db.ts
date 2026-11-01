@@ -400,13 +400,17 @@ export function getDatabase(): DatabaseSync {
     // Ignore migration error
   }
 
-  // Seed default categories if none exist
-  const categoryCount = (db.prepare('SELECT COUNT(*) as count FROM categories').get() as { count: number }).count;
-  if (categoryCount === 0) {
-    const insertCat = db.prepare('INSERT INTO categories (id, name, is_visible, image, created_at) VALUES (?, ?, ?, ?, ?)');
-    const now = new Date().toISOString();
-    for (const cat of initialCategories) {
-      insertCat.run(cat.id, cat.name, 1, cat.image, now);
+  // Ensure default categories exist if missing
+  const insertCat = db.prepare('INSERT INTO categories (id, name, is_visible, image, created_at) VALUES (?, ?, ?, ?, ?)');
+  const now = new Date().toISOString();
+  for (const cat of initialCategories) {
+    try {
+      const catExists = db.prepare('SELECT id FROM categories WHERE id = ?').get(cat.id);
+      if (!catExists) {
+        insertCat.run(cat.id, cat.name, 1, cat.image, now);
+      }
+    } catch {
+      // Ignore category seed error
     }
   }
 
@@ -417,26 +421,32 @@ export function getDatabase(): DatabaseSync {
       is_featured, color, rating, reviews, created_at, updated_at
     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `);
-  const now = new Date().toISOString();
   for (const p of initialProducts) {
-    const exists = db.prepare('SELECT id FROM products WHERE id = ?').get(p.id);
-    if (!exists) {
-      insertProd.run(
-        p.id,
-        p.name,
-        p.price,
-        p.stock,
-        p.image,
-        JSON.stringify(p.images),
-        p.description,
-        p.categoryId,
-        p.isFeatured ? 1 : 0,
-        p.color,
-        p.rating,
-        p.reviews,
-        now,
-        now
-      );
+    try {
+      const exists = db.prepare('SELECT id FROM products WHERE id = ?').get(p.id);
+      if (!exists) {
+        const catExists = db.prepare('SELECT id FROM categories WHERE id = ?').get(p.categoryId);
+        if (catExists) {
+          insertProd.run(
+            p.id,
+            p.name,
+            p.price,
+            p.stock,
+            p.image,
+            JSON.stringify(p.images),
+            p.description,
+            p.categoryId,
+            p.isFeatured ? 1 : 0,
+            p.color,
+            p.rating,
+            p.reviews,
+            now,
+            now
+          );
+        }
+      }
+    } catch {
+      // Ignore initial product seed error
     }
   }
 
