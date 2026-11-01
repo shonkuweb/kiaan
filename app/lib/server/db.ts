@@ -15,6 +15,11 @@ export type Product = {
   color: string;
   rating: number;
   reviews: number;
+  potSize?: string;
+  plantHeight?: string;
+  details?: string;
+  shippingInfo?: string;
+  returnsInfo?: string;
   createdAt?: string;
   updatedAt?: string;
 };
@@ -33,6 +38,10 @@ export type Order = {
   details: string;
   total: number;
   status: string;
+  razorpayOrderId?: string;
+  paymentId?: string;
+  paymentStatus?: string;
+  paymentMethod?: string;
   date: string;
 };
 
@@ -43,6 +52,11 @@ export type StoreSettings = {
   featured: boolean;
   reviews: boolean;
   newsletter: boolean;
+  adminPassword?: string;
+  minOrderValue?: number;
+  minOrderQuantity?: number;
+  deliveryCharge?: number;
+  freeDeliveryThreshold?: number;
 };
 
 type DbProductRow = {
@@ -58,6 +72,11 @@ type DbProductRow = {
   color: string;
   rating: number;
   reviews: number;
+  pot_size?: string;
+  plant_height?: string;
+  details?: string;
+  shipping_info?: string;
+  returns_info?: string;
   created_at: string;
   updated_at: string;
 };
@@ -76,6 +95,10 @@ type DbOrderRow = {
   details: string;
   total: number;
   status: string;
+  razorpay_order_id?: string;
+  payment_id?: string;
+  payment_status?: string;
+  payment_method?: string;
   created_at: string;
 };
 
@@ -319,6 +342,51 @@ export function getDatabase(): DatabaseSync {
     // Column already exists
   }
   try {
+    db.exec('ALTER TABLE products ADD COLUMN pot_size TEXT NOT NULL DEFAULT "";');
+  } catch {
+    // Column already exists
+  }
+  try {
+    db.exec('ALTER TABLE products ADD COLUMN plant_height TEXT NOT NULL DEFAULT "";');
+  } catch {
+    // Column already exists
+  }
+  try {
+    db.exec('ALTER TABLE products ADD COLUMN details TEXT NOT NULL DEFAULT "";');
+  } catch {
+    // Column already exists
+  }
+  try {
+    db.exec("ALTER TABLE orders ADD COLUMN razorpay_order_id TEXT DEFAULT '';");
+  } catch {
+    // Column already exists
+  }
+  try {
+    db.exec("ALTER TABLE orders ADD COLUMN payment_id TEXT DEFAULT '';");
+  } catch {
+    // Column already exists
+  }
+  try {
+    db.exec("ALTER TABLE orders ADD COLUMN payment_status TEXT DEFAULT 'pending';");
+  } catch {
+    // Column already exists
+  }
+  try {
+    db.exec("ALTER TABLE orders ADD COLUMN payment_method TEXT DEFAULT 'cod';");
+  } catch {
+    // Column already exists
+  }
+  try {
+    db.exec('ALTER TABLE products ADD COLUMN shipping_info TEXT NOT NULL DEFAULT "";');
+  } catch {
+    // Column already exists
+  }
+  try {
+    db.exec('ALTER TABLE products ADD COLUMN returns_info TEXT NOT NULL DEFAULT "";');
+  } catch {
+    // Column already exists
+  }
+  try {
     db.prepare('UPDATE categories SET image = ? WHERE id = ? AND (image IS NULL OR image = "")').run('/images/collection.webp', 'adenium');
     db.prepare('UPDATE categories SET image = ? WHERE id = ? AND (image IS NULL OR image = "")').run('/images/essentials.webp', 'agrocare');
   } catch {
@@ -406,6 +474,11 @@ function rowToProduct(row: DbProductRow): Product {
     color: row.color || 'pink',
     rating: Number(row.rating || 4.9),
     reviews: Number(row.reviews || 0),
+    potSize: row.pot_size || '',
+    plantHeight: row.plant_height || '',
+    details: row.details || '',
+    shippingInfo: row.shipping_info || '',
+    returnsInfo: row.returns_info || '',
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
@@ -455,6 +528,11 @@ export function createProduct(data: {
   color?: string;
   rating?: number;
   reviews?: number;
+  potSize?: string;
+  plantHeight?: string;
+  details?: string;
+  shippingInfo?: string;
+  returnsInfo?: string;
 }): Product {
   const db = getDatabase();
   const id = data.id || crypto.randomUUID();
@@ -465,8 +543,9 @@ export function createProduct(data: {
   const stmt = db.prepare(`
     INSERT INTO products (
       id, name, price, stock, image, images, description, category_id,
-      is_featured, color, rating, reviews, created_at, updated_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      is_featured, color, rating, reviews, pot_size, plant_height, details,
+      shipping_info, returns_info, created_at, updated_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `);
 
   stmt.run(
@@ -482,6 +561,11 @@ export function createProduct(data: {
     data.color || 'pink',
     data.rating ?? 4.9,
     data.reviews ?? 0,
+    (data.potSize || '').trim(),
+    (data.plantHeight || '').trim(),
+    (data.details || '').trim(),
+    (data.shippingInfo || '').trim(),
+    (data.returnsInfo || '').trim(),
     now,
     now
   );
@@ -506,6 +590,11 @@ export function updateProduct(id: string, data: Partial<Product>): Product | nul
   const color = data.color !== undefined ? data.color : existing.color;
   const rating = data.rating !== undefined ? Number(data.rating) : existing.rating;
   const reviews = data.reviews !== undefined ? Number(data.reviews) : existing.reviews;
+  const potSize = data.potSize !== undefined ? data.potSize.trim() : (existing.potSize || '');
+  const plantHeight = data.plantHeight !== undefined ? data.plantHeight.trim() : (existing.plantHeight || '');
+  const details = data.details !== undefined ? data.details.trim() : (existing.details || '');
+  const shippingInfo = data.shippingInfo !== undefined ? data.shippingInfo.trim() : (existing.shippingInfo || '');
+  const returnsInfo = data.returnsInfo !== undefined ? data.returnsInfo.trim() : (existing.returnsInfo || '');
 
   const stmt = db.prepare(`
     UPDATE products SET
@@ -520,6 +609,11 @@ export function updateProduct(id: string, data: Partial<Product>): Product | nul
       color = ?,
       rating = ?,
       reviews = ?,
+      pot_size = ?,
+      plant_height = ?,
+      details = ?,
+      shipping_info = ?,
+      returns_info = ?,
       updated_at = ?
     WHERE id = ?
   `);
@@ -536,6 +630,11 @@ export function updateProduct(id: string, data: Partial<Product>): Product | nul
     color,
     rating,
     reviews,
+    potSize,
+    plantHeight,
+    details,
+    shippingInfo,
+    returnsInfo,
     now,
     id
   );
@@ -612,63 +711,172 @@ export function getOrders(): Order[] {
     details: r.details,
     total: Number(r.total),
     status: r.status,
+    razorpayOrderId: r.razorpay_order_id || '',
+    paymentId: r.payment_id || '',
+    paymentStatus: r.payment_status || 'pending',
+    paymentMethod: r.payment_method || 'cod',
     date: r.created_at,
   }));
 }
 
-export function createOrder(data: { customer: string; details: string; total: number; status?: string }): Order {
+export function getOrderById(id: string): Order | null {
   const db = getDatabase();
-  const id = crypto.randomUUID();
+  const r = db.prepare('SELECT * FROM orders WHERE id = ?').get(id) as unknown as DbOrderRow | undefined;
+  if (!r) return null;
+  return {
+    id: r.id,
+    customer: r.customer,
+    details: r.details,
+    total: Number(r.total),
+    status: r.status,
+    razorpayOrderId: r.razorpay_order_id || '',
+    paymentId: r.payment_id || '',
+    paymentStatus: r.payment_status || 'pending',
+    paymentMethod: r.payment_method || 'cod',
+    date: r.created_at,
+  };
+}
+
+export function getOrderByRazorpayOrderId(razorpayOrderId: string): Order | null {
+  const db = getDatabase();
+  const r = db.prepare('SELECT * FROM orders WHERE razorpay_order_id = ?').get(razorpayOrderId) as unknown as DbOrderRow | undefined;
+  if (!r) return null;
+  return {
+    id: r.id,
+    customer: r.customer,
+    details: r.details,
+    total: Number(r.total),
+    status: r.status,
+    razorpayOrderId: r.razorpay_order_id || '',
+    paymentId: r.payment_id || '',
+    paymentStatus: r.payment_status || 'pending',
+    paymentMethod: r.payment_method || 'cod',
+    date: r.created_at,
+  };
+}
+
+export function createOrder(data: {
+  id?: string;
+  customer: string;
+  details: string;
+  total: number;
+  status?: string;
+  razorpayOrderId?: string;
+  paymentId?: string;
+  paymentStatus?: string;
+  paymentMethod?: string;
+}): Order {
+  const db = getDatabase();
+  const id = data.id || crypto.randomUUID();
   const now = new Date().toISOString();
   const status = data.status || 'Pending';
-  db.prepare(`
-    INSERT INTO orders (id, customer, details, total, status, created_at)
-    VALUES (?, ?, ?, ?, ?, ?)
-  `).run(id, data.customer.trim(), data.details.trim(), Number(data.total), status, now);
+  const razorpayOrderId = data.razorpayOrderId || '';
+  const paymentId = data.paymentId || '';
+  const paymentStatus = data.paymentStatus || 'pending';
+  const paymentMethod = data.paymentMethod || 'cod';
 
-  return { id, customer: data.customer.trim(), details: data.details.trim(), total: Number(data.total), status, date: now };
+  db.prepare(`
+    INSERT INTO orders (id, customer, details, total, status, razorpay_order_id, payment_id, payment_status, payment_method, created_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `).run(
+    id,
+    data.customer.trim(),
+    data.details.trim(),
+    Number(data.total),
+    status,
+    razorpayOrderId,
+    paymentId,
+    paymentStatus,
+    paymentMethod,
+    now
+  );
+
+  return {
+    id,
+    customer: data.customer.trim(),
+    details: data.details.trim(),
+    total: Number(data.total),
+    status,
+    razorpayOrderId,
+    paymentId,
+    paymentStatus,
+    paymentMethod,
+    date: now,
+  };
+}
+
+export function updateOrderPayment(
+  idOrRazorpayOrderId: string,
+  data: {
+    status?: string;
+    paymentId?: string;
+    paymentStatus?: string;
+  }
+): Order | null {
+  const db = getDatabase();
+  const existing = (db.prepare('SELECT * FROM orders WHERE id = ? OR razorpay_order_id = ?').get(idOrRazorpayOrderId, idOrRazorpayOrderId) as unknown as DbOrderRow | undefined);
+  if (!existing) return null;
+
+  const status = data.status !== undefined ? data.status : existing.status;
+  const paymentId = data.paymentId !== undefined ? data.paymentId : (existing.payment_id || '');
+  const paymentStatus = data.paymentStatus !== undefined ? data.paymentStatus : (existing.payment_status || 'pending');
+
+  db.prepare(`
+    UPDATE orders SET
+      status = ?,
+      payment_id = ?,
+      payment_status = ?
+    WHERE id = ?
+  `).run(status, paymentId, paymentStatus, existing.id);
+
+  return getOrderById(existing.id);
 }
 
 export function updateOrderStatus(id: string, status: string): Order | null {
   const db = getDatabase();
   const result = db.prepare('UPDATE orders SET status = ? WHERE id = ?').run(status, id);
   if (result.changes === 0) return null;
-  const row = db.prepare('SELECT * FROM orders WHERE id = ?').get(id) as unknown as DbOrderRow | undefined;
-  if (!row) return null;
-  return {
-    id: row.id,
-    customer: row.customer,
-    details: row.details,
-    total: Number(row.total),
-    status: row.status,
-    date: row.created_at,
-  };
+  return getOrderById(id);
 }
 
 export function getStoreSettings(): StoreSettings {
   const db = getDatabase();
   const row = db.prepare('SELECT value FROM settings WHERE key = ?').get('store_settings') as unknown as DbSettingRow | undefined;
-  if (row) {
-    try {
-      return JSON.parse(row.value);
-    } catch {
-      // fallback
-    }
-  }
-  return {
+  const defaults: StoreSettings = {
     title: 'Beautiful Adenium Plants for Your Garden',
     subtitle: 'Rare varieties, healthy plants and complete care support.',
     hero: true,
     featured: true,
     reviews: true,
     newsletter: true,
+    adminPassword: 'admin',
+    minOrderValue: 0,
+    minOrderQuantity: 1,
+    deliveryCharge: 69,
+    freeDeliveryThreshold: 999,
   };
+  if (row) {
+    try {
+      const parsed = JSON.parse(row.value);
+      return { ...defaults, ...parsed };
+    } catch {
+      // fallback
+    }
+  }
+  return defaults;
 }
 
 export function updateStoreSettings(settings: Partial<StoreSettings>): StoreSettings {
   const db = getDatabase();
   const current = getStoreSettings();
-  const next: StoreSettings = { ...current, ...settings };
+  const next: StoreSettings = {
+    ...current,
+    ...settings,
+    minOrderValue: settings.minOrderValue !== undefined ? Math.max(0, Number(settings.minOrderValue) || 0) : (current.minOrderValue ?? 0),
+    minOrderQuantity: settings.minOrderQuantity !== undefined ? Math.max(1, Number(settings.minOrderQuantity) || 1) : (current.minOrderQuantity ?? 1),
+    deliveryCharge: settings.deliveryCharge !== undefined ? Math.max(0, Number(settings.deliveryCharge) || 0) : (current.deliveryCharge ?? 69),
+    freeDeliveryThreshold: settings.freeDeliveryThreshold !== undefined ? Math.max(0, Number(settings.freeDeliveryThreshold) || 0) : (current.freeDeliveryThreshold ?? 999),
+  };
   db.prepare(`
     INSERT INTO settings (key, value) VALUES ('store_settings', ?)
     ON CONFLICT(key) DO UPDATE SET value = excluded.value

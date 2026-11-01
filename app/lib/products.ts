@@ -11,6 +11,11 @@ export type Product = {
   color: string;
   rating: number;
   reviews: number;
+  potSize?: string;
+  plantHeight?: string;
+  details?: string;
+  shippingInfo?: string;
+  returnsInfo?: string;
   createdAt?: string;
   updatedAt?: string;
 };

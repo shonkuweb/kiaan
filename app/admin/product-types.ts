@@ -11,6 +11,11 @@ export type InventoryProduct = {
   color?: string;
   rating?: number;
   reviews?: number;
+  potSize?: string;
+  plantHeight?: string;
+  details?: string;
+  shippingInfo?: string;
+  returnsInfo?: string;
 };
 
 export type ProductCategory = {

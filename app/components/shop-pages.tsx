@@ -146,20 +146,31 @@ export function ProductDetails({
       ? relatedProducts
       : storeProducts.filter(p => p.id !== product.id).slice(0, 2);
 
-  const specs: { icon: IconName; name: string; value: string }[] =
-    product.categoryId === 'agrocare'
-      ? [
-          { icon: 'leaf', name: 'Type', value: 'Plant Care' },
-          { icon: 'shield', name: 'Safety', value: '100% Organic' },
-          { icon: 'truck', name: 'Delivery', value: 'Pan-India' },
-          { icon: 'flower', name: 'Suitability', value: 'Adenium & Bonsai' },
-        ]
-      : [
-          { icon: 'leaf', name: 'Grafted', value: 'Variety' },
-          { icon: 'pot', name: 'Pot Size', value: '4–5 inch' },
-          { icon: 'height', name: 'Plant Height', value: '~15–20 cm' },
-          { icon: 'flower', name: 'Bloom', value: 'Year Round' },
-        ];
+  const specs: { icon: IconName; name: string; value: string }[] = [];
+  if (product.potSize) {
+    specs.push({ icon: 'pot', name: 'Pot / Size', value: product.potSize });
+  } else {
+    specs.push({
+      icon: 'pot',
+      name: 'Size',
+      value: product.categoryId === 'agrocare' ? 'Standard Pack' : '4–5 inch pot',
+    });
+  }
+  if (product.plantHeight) {
+    specs.push({ icon: 'height', name: 'Dimensions', value: product.plantHeight });
+  } else if (product.categoryId !== 'agrocare') {
+    specs.push({ icon: 'height', name: 'Plant Height', value: '~15–20 cm' });
+  }
+  specs.push({
+    icon: 'leaf',
+    name: 'Category',
+    value: product.categoryId === 'agrocare' ? 'Agro Care' : 'Adenium Plant',
+  });
+  specs.push({
+    icon: 'shield',
+    name: 'Stock Status',
+    value: product.stock > 0 ? (product.stock <= 5 ? `Only ${product.stock} left` : 'In Stock') : 'Out of Stock',
+  });
 
   const activePhoto = gallery[activeImage] || gallery[0];
   const activePhotoSrc =
@@ -218,7 +229,10 @@ export function ProductDetails({
         </div>
         <div className="detail-price-row">
           <p className="detail-price">{money(product.price)}</p>
-          <span className="stock-badge"><Icon name="check" />In Stock</span>
+          <span className={`stock-badge ${product.stock <= 0 ? 'out-of-stock' : ''}`}>
+            <Icon name="check" />
+            {product.stock > 0 ? (product.stock <= 5 ? `Only ${product.stock} left` : 'In Stock') : 'Out of Stock'}
+          </span>
         </div>
         <p className="product-description">{product.description}</p>
         <div className="product-specs">
@@ -232,16 +246,16 @@ export function ProductDetails({
         </div>
         <div className="detail-purchase">
           <div className="reference-quantity">
-            <button onClick={() => setAmount(n => Math.max(1, n - 1))} aria-label="Decrease quantity" disabled={amount === 1}>
+            <button onClick={() => setAmount(n => Math.max(1, n - 1))} aria-label="Decrease quantity" disabled={amount === 1 || product.stock <= 0}>
               <Icon name="minus" />
             </button>
             <span aria-live="polite">{amount}</span>
-            <button onClick={() => setAmount(n => Math.min(99, n + 1))} aria-label="Increase quantity" disabled={amount === 99}>
+            <button onClick={() => setAmount(n => Math.min(Math.max(1, product.stock), n + 1))} aria-label="Increase quantity" disabled={amount >= product.stock}>
               <Icon name="plus" />
             </button>
           </div>
-          <button className="pill dark detail-add" onClick={() => add(product, amount)}>
-            <Icon name="cart" />Add to Cart
+          <button className="pill dark detail-add" disabled={product.stock <= 0} onClick={() => add(product, amount)}>
+            <Icon name="cart" />{product.stock > 0 ? 'Add to Cart' : 'Out of Stock'}
           </button>
         </div>
         <button className="plant-care-link" onClick={() => setPanel('guide')}>
@@ -256,7 +270,7 @@ export function ProductDetails({
               title: 'Product Details',
               content: (
                 <p>
-                  {product.description} Grafted variety in a 4–5 inch pot, approximately 15–20 cm tall. Plants are living things; flower color, size, and growth can vary. Photos show the variety; the plant delivered may not be in bloom.
+                  {product.details || product.description || 'Quality plant grown with care at Kiaan Nursery.'}
                 </p>
               ),
             },
@@ -265,7 +279,7 @@ export function ProductDetails({
               title: 'Shipping & Delivery',
               content: (
                 <p>
-                  Plants are packed carefully for delivery. Contact the nursery to confirm serviceability, delivery time, and shipping charges for your PIN code before ordering.
+                  {product.shippingInfo || 'Plants and products are packed with special care for safe nationwide transit. Contact our team to verify pin-code serviceability, transit duration, and shipping charges before ordering.'}
                 </p>
               ),
             },
@@ -274,7 +288,7 @@ export function ProductDetails({
               title: 'Returns & Refunds',
               content: (
                 <p>
-                  If your plant arrives damaged, contact the nursery promptly with photos of the plant and packaging. Confirm the applicable return and refund terms with our team before placing an order.
+                  {product.returnsInfo || 'If your shipment arrives damaged or with issues, contact Kiaan Nursery promptly on WhatsApp with photos of the plant and packaging. We assist with replacements and care advice.'}
                 </p>
               ),
             },

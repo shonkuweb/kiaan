@@ -386,18 +386,18 @@ export function AdminPanel({ tab }: { tab: Tab }) {
                 </p>
               )}
             </div>
-            {tab !== 'settings' && (
+            {tab !== 'settings' && tab !== 'orders' && (
               <button
                 className="admin-button primary"
                 disabled={!ready || (tab === 'inventory' && !data.categories.length)}
                 onClick={() => {
                   setEditingCategory(null);
                   setEditingProduct(null);
-                  setModal(tab === 'inventory' ? 'product' : tab === 'categories' ? 'category' : 'order');
+                  setModal(tab === 'inventory' ? 'product' : 'category');
                 }}
               >
                 <Icon name="plus" />
-                {tab === 'inventory' ? 'Add product' : tab === 'categories' ? 'Add category' : 'Add manual order'}
+                {tab === 'inventory' ? 'Add product' : 'Add category'}
               </button>
             )}
           </div>
@@ -564,7 +564,7 @@ export function AdminPanel({ tab }: { tab: Tab }) {
                     <div className="admin-card-header">
                       <div>
                         <h2>Your orders</h2>
-                        <p>Record enquiries manually and update their progress.</p>
+                        <p>Track store and customer orders and update their progress.</p>
                       </div>
                       <div className="admin-order-tools">
                         <label className="admin-search">
@@ -598,13 +598,8 @@ export function AdminPanel({ tab }: { tab: Tab }) {
                     {!visibleOrders.length && (
                       <div className="admin-empty">
                         <span className="admin-empty-icon"><Icon name="box" /></span>
-                        <h3>{data.orders.length ? 'No matching orders' : 'Ready for your first order'}</h3>
-                        <p>{data.orders.length ? 'Try a different search or status.' : 'Add a manual order from a customer enquiry to start tracking it here.'}</p>
-                        {!data.orders.length && (
-                          <button className="admin-button secondary" onClick={() => setModal('order')}>
-                            <Icon name="plus" />Add manual order
-                          </button>
-                        )}
+                        <h3>{data.orders.length ? 'No matching orders' : 'No orders yet'}</h3>
+                        <p>{data.orders.length ? 'Try a different search or status.' : 'New orders placed through the website will appear here automatically.'}</p>
                       </div>
                     )}
                   </section>

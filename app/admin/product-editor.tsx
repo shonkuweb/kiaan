@@ -88,6 +88,11 @@ export function ProductEditor({ product, categories, categoryId, onClose, onSave
       color: product?.color || 'pink',
       rating: product?.rating ?? 4.9,
       reviews: product?.reviews ?? 0,
+      potSize: text('potSize'),
+      plantHeight: text('plantHeight'),
+      details: text('details'),
+      shippingInfo: text('shippingInfo'),
+      returnsInfo: text('returnsInfo'),
     });
     if (!saved) setError('Your browser could not save this product. Free some storage and try again.');
   }
@@ -176,9 +181,36 @@ export function ProductEditor({ product, categories, categoryId, onClose, onSave
             </div>
 
             <label>
-              Description
-              <textarea name="description" defaultValue={product?.description || ''} maxLength={1000} rows={3} disabled={uploading} />
+              Short description
+              <textarea name="description" defaultValue={product?.description || ''} maxLength={1000} rows={2} placeholder="Brief summary shown on product card and overview" disabled={uploading} />
             </label>
+
+            <div className="admin-form-grid">
+              <label>
+                Pot size / Package size
+                <input name="potSize" defaultValue={product?.potSize || ''} maxLength={60} placeholder="e.g. 4–5 inch or 500 ml" disabled={uploading} />
+              </label>
+              <label>
+                Plant height / Form
+                <input name="plantHeight" defaultValue={product?.plantHeight || ''} maxLength={60} placeholder="e.g. ~15–20 cm or Liquid spray" disabled={uploading} />
+              </label>
+            </div>
+
+            <label>
+              Full product details & care instructions
+              <textarea name="details" defaultValue={product?.details || ''} maxLength={2500} rows={3} placeholder="In-depth details shown under the Product Details accordion on the storefront" disabled={uploading} />
+            </label>
+
+            <div className="admin-form-grid">
+              <label>
+                Custom shipping note (optional)
+                <input name="shippingInfo" defaultValue={product?.shippingInfo || ''} maxLength={500} placeholder="Custom delivery notes for this item" disabled={uploading} />
+              </label>
+              <label>
+                Custom returns note (optional)
+                <input name="returnsInfo" defaultValue={product?.returnsInfo || ''} maxLength={500} placeholder="Custom return terms for this item" disabled={uploading} />
+              </label>
+            </div>
 
             <label className="admin-toggle-row" style={{ marginTop: '20px', borderTop: '1px solid #edf0e7', paddingTop: '16px' }}>
               <span>

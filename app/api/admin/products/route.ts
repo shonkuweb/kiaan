@@ -33,6 +33,11 @@ export async function POST(request: NextRequest) {
     const images = Array.isArray(body.images) ? body.images : [];
     const isFeatured = Boolean(body.isFeatured);
     const color = String(body.color || 'pink').trim();
+    const potSize = String(body.potSize || '').trim();
+    const plantHeight = String(body.plantHeight || '').trim();
+    const details = String(body.details || '').trim();
+    const shippingInfo = String(body.shippingInfo || '').trim();
+    const returnsInfo = String(body.returnsInfo || '').trim();
 
     if (!name || name.length > 100) {
       return Response.json({ error: 'Enter a product name up to 100 characters.' }, { status: 400 });
@@ -61,6 +66,11 @@ export async function POST(request: NextRequest) {
       image: images[0] || '',
       isFeatured,
       color,
+      potSize,
+      plantHeight,
+      details,
+      shippingInfo,
+      returnsInfo,
     });
 
     return Response.json(created, { status: 201 });
@@ -96,6 +106,11 @@ export async function PUT(request: NextRequest) {
     const images = Array.isArray(body.images) ? body.images : existing.images;
     const isFeatured = body.isFeatured !== undefined ? Boolean(body.isFeatured) : existing.isFeatured;
     const color = body.color !== undefined ? String(body.color).trim() : existing.color;
+    const potSize = body.potSize !== undefined ? String(body.potSize).trim() : (existing.potSize || '');
+    const plantHeight = body.plantHeight !== undefined ? String(body.plantHeight).trim() : (existing.plantHeight || '');
+    const details = body.details !== undefined ? String(body.details).trim() : (existing.details || '');
+    const shippingInfo = body.shippingInfo !== undefined ? String(body.shippingInfo).trim() : (existing.shippingInfo || '');
+    const returnsInfo = body.returnsInfo !== undefined ? String(body.returnsInfo).trim() : (existing.returnsInfo || '');
 
     if (!name || name.length > 100) {
       return Response.json({ error: 'Enter a product name up to 100 characters.' }, { status: 400 });
@@ -123,6 +138,11 @@ export async function PUT(request: NextRequest) {
       image: images[0] || existing.image,
       isFeatured,
       color,
+      potSize,
+      plantHeight,
+      details,
+      shippingInfo,
+      returnsInfo,
     });
 
     return Response.json(updated);

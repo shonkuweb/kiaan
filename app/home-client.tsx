@@ -148,48 +148,50 @@ export function HomeClient({
           ))}
         </section>
 
-        {/* Dynamic Circular Categories from Admin Panel */}
-        <section className="store-categories-section" aria-label="Store Categories">
-          <div className="store-categories-header">
-            <p className="categories-eyebrow">— &nbsp;Shop by Category&nbsp; —</p>
-          </div>
-          <div className="category-circles-scroll-wrap">
-            <div className="category-circles-row" role="tablist" aria-label="Categories">
-              {categories.map(cat => {
-                const isActive = activeCategoryId === cat.id;
-                const thumbImage = cat.image || (cat.id === 'agrocare' ? '/images/essentials.webp' : '/images/collection.webp');
-                return (
-                  <button
-                    key={cat.id}
-                    type="button"
-                    role="tab"
-                    aria-selected={isActive}
-                    aria-controls="store-catalog"
-                    className={`category-circle-btn ${isActive ? 'is-active' : ''}`}
-                    onClick={() => setActiveCategoryId(cat.id)}
-                  >
-                    <div className="category-circle-avatar">
-                      <img src={thumbImage} alt={cat.name} width="110" height="110" />
-                      {isActive && (
-                        <span className="category-circle-check" aria-hidden="true">
-                          <Icon name="check" />
-                        </span>
-                      )}
-                    </div>
-                    <strong className="category-circle-name">{cat.name}</strong>
-                    <span className="category-circle-status">
-                      {isActive ? (
-                        <span className="category-live-pill"><span className="pulse-dot" /> Selected</span>
-                      ) : (
-                        <span className="category-view-pill">Select</span>
-                      )}
-                    </span>
-                  </button>
-                );
-              })}
+        {/* Dynamic Circular Categories from Admin Panel (Visible only when 2 or more categories exist) */}
+        {categories.length >= 2 && (
+          <section className="store-categories-section" aria-label="Store Categories">
+            <div className="store-categories-header">
+              <p className="categories-eyebrow">— &nbsp;Shop by Category&nbsp; —</p>
             </div>
-          </div>
-        </section>
+            <div className="category-circles-scroll-wrap">
+              <div className="category-circles-row" role="tablist" aria-label="Categories">
+                {categories.map(cat => {
+                  const isActive = activeCategoryId === cat.id;
+                  const thumbImage = cat.image || (cat.id === 'agrocare' ? '/images/essentials.webp' : '/images/collection.webp');
+                  return (
+                    <button
+                      key={cat.id}
+                      type="button"
+                      role="tab"
+                      aria-selected={isActive}
+                      aria-controls="store-catalog"
+                      className={`category-circle-btn ${isActive ? 'is-active' : ''}`}
+                      onClick={() => setActiveCategoryId(cat.id)}
+                    >
+                      <div className="category-circle-avatar">
+                        <img src={thumbImage} alt={cat.name} width="84" height="84" />
+                        {isActive && (
+                          <span className="category-circle-check" aria-hidden="true">
+                            <Icon name="check" />
+                          </span>
+                        )}
+                      </div>
+                      <strong className="category-circle-name">{cat.name}</strong>
+                      <span className="category-circle-status">
+                        {isActive ? (
+                          <span className="category-live-pill"><span className="pulse-dot" /> Selected</span>
+                        ) : (
+                          <span className="category-view-pill">Select</span>
+                        )}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          </section>
+        )}
       </div>
 
       {/* Featured Section (Switches dynamically based on isFeatured in database) */}
