@@ -774,7 +774,69 @@ export function AdminPanel({ tab }: { tab: Tab }) {
                       placeholder="e.g. Pots & planters"
                     />
                   </label>
-                  <label className="admin-toggle-row" style={{ marginTop: '16px' }}>
+
+                  <div style={{ marginTop: '18px' }}>
+                    <span style={{ fontSize: '12px', fontWeight: 600, display: 'block', marginBottom: '8px', color: '#33482f' }}>
+                      Category thumbnail image
+                    </span>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+                      <div style={{
+                        width: '68px',
+                        height: '68px',
+                        borderRadius: '50%',
+                        overflow: 'hidden',
+                        background: '#f2f5ed',
+                        border: '3px solid #cbd7c0',
+                        flexShrink: 0,
+                        display: 'grid',
+                        placeItems: 'center',
+                        boxShadow: '0 4px 12px rgba(0,0,0,0.06)'
+                      }}>
+                        {categoryImage ? (
+                          <img src={categoryImage} alt="Preview" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                        ) : (
+                          <Icon name="leaf" />
+                        )}
+                      </div>
+                      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                        <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                          <label className="admin-button secondary" style={{ cursor: 'pointer', margin: 0, padding: '8px 14px' }}>
+                            <Icon name="plus" />
+                            <span>{categoryImageUploading ? 'Uploading…' : 'Upload photo'}</span>
+                            <input
+                              type="file"
+                              accept="image/png,image/jpeg,image/webp"
+                              style={{ display: 'none' }}
+                              disabled={categoryImageUploading}
+                              onChange={e => {
+                                const file = e.target.files?.[0];
+                                if (file) handleCategoryImageUpload(file);
+                              }}
+                            />
+                          </label>
+                          {categoryImage && (
+                            <button
+                              type="button"
+                              className="admin-button secondary"
+                              onClick={() => setCategoryImage('')}
+                              style={{ padding: '8px 12px' }}
+                            >
+                              Remove
+                            </button>
+                          )}
+                        </div>
+                        <input
+                          type="url"
+                          placeholder="Or paste image URL (/images/... or https://...)"
+                          value={categoryImage}
+                          onChange={e => setCategoryImage(e.target.value)}
+                          style={{ fontSize: '12px', padding: '8px 10px' }}
+                        />
+                      </div>
+                    </div>
+                  </div>
+
+                  <label className="admin-toggle-row" style={{ marginTop: '18px' }}>
                     <span>
                       <strong>Visible on Storefront</strong>
                       <small>When enabled, this category appears in storefront menus, filters, and collection tabs.</small>
