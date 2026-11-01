@@ -65,7 +65,7 @@ const tabs: { id: Tab; label: string; href: string; icon: IconName }[] = [
   { id: 'inventory', label: 'Inventory', href: '/admin', icon: 'box' },
   { id: 'orders', label: 'Orders', href: '/admin/orders', icon: 'file' },
   { id: 'categories', label: 'Categories', href: '/admin/categories', icon: 'tag' },
-  { id: 'settings', label: 'Store settings', href: '/admin/settings', icon: 'grid' },
+  { id: 'settings', label: 'Settings', href: '/admin/settings', icon: 'grid' },
 ];
 
 function parseCustomer(raw: string) {
@@ -674,6 +674,37 @@ export function AdminPanel({ tab }: { tab: Tab }) {
     }
   }
 
+  async function deleteCompletedOrder(id: string) {
+    const shortId = id.slice(0, 8).toUpperCase();
+    if (!window.confirm(`Are you sure you want to delete completed order #KIAAN-${shortId}? This action cannot be undone.`)) {
+      return;
+    }
+
+    try {
+      const res = await fetch(`/api/admin/orders?id=${encodeURIComponent(id)}`, {
+        method: 'DELETE',
+      });
+      const result = await res.json();
+      if (!res.ok) {
+        if (res.status === 401 || res.status === 403) {
+          sessionStorage.removeItem('kiaan_admin_auth');
+          setIsAuthenticated(false);
+        }
+        return setError(result.error || 'Failed to delete order.');
+      }
+      setData(prev => ({
+        ...prev,
+        orders: prev.orders.filter(o => o.id !== id),
+      }));
+      if (selectedOrderDetails?.id === id) {
+        setSelectedOrderDetails(null);
+      }
+      setMessage(`Completed order #KIAAN-${shortId} deleted.`);
+    } catch {
+      setError('Could not delete order.');
+    }
+  }
+
   function copyOrderId(id: string) {
     const shortId = id.slice(0, 8).toUpperCase();
     navigator.clipboard.writeText(`#KIAAN-${shortId}`);
@@ -705,36 +736,70 @@ export function AdminPanel({ tab }: { tab: Tab }) {
   });
   const current = tabs.find(t => t.id === tab)!;
 
+  if (isAuthenticated === null) {
+    return (
+      <div className="admin-login-screen">
+        <div className="admin-login-loading">
+          <img
+            src="/images/kiaan-logo-dark.png"
+            alt="Kiaan Nursery"
+            width="170"
+            height="55"
+            style={{ objectFit: 'contain' }}
+          />
+          <div className="admin-login-spinner" />
+          <p>Verifying admin session…</p>
+        </div>
+      </div>
+    );
+  }
+
   if (isAuthenticated === false) {
     return (
       <div className="admin-login-screen">
         <div className="admin-login-card">
+          <div className="admin-login-badge">
+            <span className="admin-login-badge-dot" />
+            <span>SECURE WORKSPACE</span>
+          </div>
+
           <div className="admin-login-logo">
             <img
               src="/images/kiaan-logo-dark.png"
               alt="Kiaan Nursery"
-              width="170"
-              height="55"
+              width="175"
+              height="56"
               style={{ objectFit: 'contain' }}
             />
           </div>
-          <h1>Admin Sign In</h1>
-          <p>Please enter your administrator password to access inventory, orders, and store settings.</p>
-          <form onSubmit={handleLogin}>
+
+          <div className="admin-login-header">
+            <h1>Admin Sign In</h1>
+            <p>Enter your administrator password to access orders, inventory, and store settings.</p>
+          </div>
+
+          <form onSubmit={handleLogin} className="admin-login-form">
             <div className="admin-login-field">
               <label htmlFor="admin-pwd">Administrator Password</label>
               <div className="admin-password-input-wrap">
+                <div className="admin-password-icon">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
+                    <path d="M7 11V7a5 5 0 0 1 10 0v4" />
+                  </svg>
+                </div>
                 <input
                   id="admin-pwd"
                   type={showLoginPassword ? 'text' : 'password'}
                   required
                   autoFocus
-                  placeholder="Enter your password"
+                  placeholder="Enter administrator password"
                   value={loginPassword}
                   onChange={e => {
                     setLoginPassword(e.target.value);
                     setLoginError('');
                   }}
+                  className="admin-password-input"
                 />
                 <button
                   type="button"
@@ -757,20 +822,53 @@ export function AdminPanel({ tab }: { tab: Tab }) {
                 </button>
               </div>
             </div>
-            {loginError && <p className="admin-login-error">{loginError}</p>}
+
+            {loginError && (
+              <div className="admin-login-error">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <circle cx="12" cy="12" r="10" />
+                  <line x1="12" y1="8" x2="12" y2="12" />
+                  <line x1="12" y1="16" x2="12.01" y2="16" />
+                </svg>
+                <span>{loginError}</span>
+              </div>
+            )}
+
             <button
               type="submit"
               disabled={isLoggingIn || !loginPassword.trim()}
-              className="admin-button primary admin-login-submit"
-              style={{ width: '100%', marginTop: '16px', height: '46px', fontSize: '14px', borderRadius: '10px' }}
+              className="admin-login-submit-btn"
             >
-              {isLoggingIn ? 'Authenticating…' : 'Sign In to Workspace'}
+              {isLoggingIn ? (
+                <>
+                  <span className="admin-btn-spinner" />
+                  <span>Authenticating…</span>
+                </>
+              ) : (
+                <>
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4" />
+                    <polyline points="10 17 15 12 10 7" />
+                    <line x1="15" y1="12" x2="3" y2="12" />
+                  </svg>
+                  <span>Sign In to Workspace</span>
+                </>
+              )}
             </button>
           </form>
+
           <div className="admin-login-footer">
-            <Link href="/" className="admin-back-store">
-              ← Return to Storefront
+            <Link href="/" className="admin-back-store-btn">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                <line x1="19" y1="12" x2="5" y2="12" />
+                <polyline points="12 19 5 12 12 5" />
+              </svg>
+              <span>Return to Storefront</span>
             </Link>
+          </div>
+
+          <div className="admin-login-bottom-hint">
+            <span>Kiaan Nursery & Agro Care Management System</span>
           </div>
         </div>
       </div>
@@ -808,15 +906,27 @@ export function AdminPanel({ tab }: { tab: Tab }) {
 
       <div className="admin-workspace">
         <header className="admin-topbar">
-          <div className="admin-topbar-breadcrumb">
-            <span>Admin</span>
-            <span className="admin-divider">/</span>
-            <strong>{current.label}</strong>
+          <div className="admin-topbar-left">
+            <Link href="/admin" className="admin-topbar-mobile-brand" title="Kiaan Nursery Admin">
+              <img
+                src="/images/kiaan-logo-dark.png"
+                alt="Kiaan Nursery"
+                width="84"
+                height="28"
+                style={{ objectFit: 'contain' }}
+              />
+              <span className="admin-brand-badge">ADMIN</span>
+            </Link>
+            <div className="admin-topbar-breadcrumb">
+              <span className="admin-breadcrumb-home">Admin</span>
+              <span className="admin-divider">/</span>
+              <strong>{current.label}</strong>
+            </div>
           </div>
           <div className="admin-account">
             <Link href="/" target="_blank" rel="noreferrer" className="admin-topbar-store-link" title="Open Storefront in new tab">
               <Icon name="leaf" />
-              <span>Storefront</span>
+              <span className="admin-store-link-label">Storefront</span>
             </Link>
             <div className="admin-user-chip">
               <span className="admin-avatar">K</span>
@@ -828,7 +938,12 @@ export function AdminPanel({ tab }: { tab: Tab }) {
               onClick={handleLogout}
               title="Sign out of Admin Panel"
             >
-              Sign out
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}>
+                <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
+                <polyline points="16 17 21 12 16 7" />
+                <line x1="21" y1="12" x2="9" y2="12" />
+              </svg>
+              <span>Sign out</span>
             </button>
           </div>
         </header>
@@ -1068,14 +1183,34 @@ export function AdminPanel({ tab }: { tab: Tab }) {
                           onClick={() => setSelectedOrderDetails(o)}
                           title="Click card to view complete user and order details"
                         >
-                          {/* Top Row: Order ID, Date, Total */}
+                          {/* Top Row: Order ID, Date, Total & Delete for Completed */}
                           <div className="admin-order-card-top-row">
                             <div className="admin-order-ref-group">
                               <span className="admin-order-ref-tag">#KIAAN-{shortId}</span>
                               <span className="admin-order-date-tag">{formattedDate}</span>
                             </div>
-                            <div className="admin-order-amount-tag">
-                              {money(o.total)}
+                            <div className="admin-order-top-right-group">
+                              <div className="admin-order-amount-tag">
+                                {money(o.total)}
+                              </div>
+                              {stageIndex === 4 && (
+                                <button
+                                  type="button"
+                                  className="admin-order-card-delete-btn"
+                                  onClick={e => {
+                                    e.stopPropagation();
+                                    deleteCompletedOrder(o.id);
+                                  }}
+                                  title="Delete completed order"
+                                  aria-label="Delete completed order"
+                                >
+                                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                                    <polyline points="3 6 5 6 21 6" />
+                                    <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+                                  </svg>
+                                  <span>Delete</span>
+                                </button>
+                              )}
                             </div>
                           </div>
 
@@ -1892,6 +2027,32 @@ export function AdminPanel({ tab }: { tab: Tab }) {
                     );
                   })}
                 </div>
+              </div>
+
+              {/* Order Modal Actions */}
+              <div className="admin-order-modal-actions">
+                {modalStageIndex === 4 && (
+                  <button
+                    type="button"
+                    className="admin-button danger admin-order-modal-delete-btn"
+                    onClick={() => deleteCompletedOrder(selectedOrderDetails.id)}
+                  >
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <polyline points="3 6 5 6 21 6" />
+                      <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+                      <line x1="10" y1="11" x2="10" y2="17" />
+                      <line x1="14" y1="11" x2="14" y2="17" />
+                    </svg>
+                    <span>Delete Completed Order</span>
+                  </button>
+                )}
+                <button
+                  type="button"
+                  className="admin-button secondary"
+                  onClick={() => setSelectedOrderDetails(null)}
+                >
+                  Close
+                </button>
               </div>
             </div>
           </dialog>
