@@ -548,10 +548,6 @@ export function NewsletterForm({ footer = false }: { footer?: boolean }) {
 
 function CartContent() {
   const { cart, quantity, remove, setPanel, products: catalog } = useStore();
-  const [promoOpen, setPromoOpen] = useState(false);
-  const [promo, setPromo] = useState('');
-  const [promoMessage, setPromoMessage] = useState('');
-  const [checkout, setCheckout] = useState(false);
 
   const count = Object.values(cart).reduce((sum, n) => sum + n, 0);
   const items = catalog.filter(p => cart[p.id]);
@@ -591,20 +587,6 @@ function CartContent() {
           </article>
         ))}
       </div>
-      <section className="promo-code">
-        <button className="promo-code-toggle" aria-expanded={promoOpen} onClick={() => setPromoOpen(!promoOpen)}>
-          <Icon name="tag" />
-          <strong>Have a promo code?</strong>
-          <span>Apply <Icon name="arrow" /></span>
-        </button>
-        {promoOpen && (
-          <form className="promo-code-form" onSubmit={e => { e.preventDefault(); setPromoMessage('Promo codes will be available when online checkout launches.'); }}>
-            <input value={promo} onChange={e => setPromo(e.target.value)} placeholder="Enter promo code" aria-label="Promo code" required maxLength={40} />
-            <button type="submit" className="pill dark">Apply</button>
-            {promoMessage && <p role="status">{promoMessage}</p>}
-          </form>
-        )}
-      </section>
       <section className="order-summary">
         <img src="https://pub-ce8688bc6c654bcfb99716f7c9373bcd.r2.dev/kiaan/brand/kiaan-logo-1793535536482.png" alt="" className="summary-watermark" />
         <h3>Order Summary</h3>
