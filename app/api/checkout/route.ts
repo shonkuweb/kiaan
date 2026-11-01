@@ -68,12 +68,9 @@ export async function POST(request: NextRequest) {
     const shipping = calculatedSubtotal >= 999 ? 0 : 69;
     const finalTotal = clientTotal > 0 ? clientTotal : (calculatedSubtotal + shipping);
 
-    const paymentLabel =
-      paymentMethod === 'upi'
-        ? 'UPI / Online'
-        : paymentMethod === 'whatsapp'
-        ? 'WhatsApp Assisted'
-        : 'Cash on Delivery (COD)';
+    const paymentLabel = paymentMethod && paymentMethod !== 'cod'
+      ? paymentMethod
+      : 'Pay on Delivery';
 
     const customerSummary = `${name} | Ph: ${phone}${email ? ` | ${email}` : ''}`;
     const fullAddress = `${address}${landmark ? `, Near ${landmark}` : ''}, ${city}, ${state} - ${pincode}`;
