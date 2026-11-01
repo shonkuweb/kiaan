@@ -71,15 +71,15 @@ export function CheckoutClient() {
   }
 
   // Cart items & subtotal
-  const items = products.filter(p => cart[p.id]);
+  const items = products.filter(p => cart[p.id] && cart[p.id] > 0);
   const subtotal = items.reduce((sum, p) => sum + p.price * cart[p.id], 0);
-  const itemCount = Object.values(cart).reduce((sum, n) => sum + n, 0);
+  const itemCount = items.reduce((sum, p) => sum + cart[p.id], 0);
 
   // Dynamic delivery calculations from store settings
   const freeShippingThreshold = settings?.freeDeliveryThreshold ?? 999;
   const standardDelivery = settings?.deliveryCharge ?? 69;
   const isFreeShipping = freeShippingThreshold > 0 && subtotal >= freeShippingThreshold;
-  const shippingFee = itemCount > 0 ? (isFreeShipping ? 0 : standardDelivery) : 0;
+  const shippingFee = itemCount > 0 && subtotal > 0 ? (isFreeShipping ? 0 : standardDelivery) : 0;
   const totalAmount = subtotal + shippingFee;
 
   // Minimum order rules from store settings

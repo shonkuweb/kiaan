@@ -6,11 +6,22 @@ export const dynamic = 'force-dynamic';
 
 export async function POST(request: NextRequest) {
   try {
-    const body = await request.json();
-    const password = String(body.password || '').trim();
+    let password = '';
+    try {
+      const body = await request.json();
+      password = String(body.password || '').trim();
+    } catch {
+      return Response.json({ error: 'Invalid request body' }, { status: 400 });
+    }
 
-    const settings = getStoreSettings();
-    const correctPassword = settings.adminPassword || 'admin';
+    let correctPassword = 'admin';
+    try {
+      const settings = getStoreSettings();
+      correctPassword = settings.adminPassword || 'admin';
+    } catch (err) {
+      console.error('Error fetching admin password from settings:', err);
+      correctPassword = 'admin';
+    }
 
     if (password === correctPassword) {
       const response = Response.json({ success: true, message: 'Authenticated' });
@@ -23,6 +34,7 @@ export async function POST(request: NextRequest) {
 
     return Response.json({ error: 'Incorrect admin password. Please try again.' }, { status: 401 });
   } catch (error) {
+    console.error('Admin auth POST error:', error);
     return Response.json({ error: 'Authentication failed' }, { status: 500 });
   }
 }

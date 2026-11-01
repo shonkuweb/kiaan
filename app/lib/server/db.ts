@@ -939,8 +939,6 @@ export function deleteOrder(id: string): boolean {
 }
 
 export function getStoreSettings(): StoreSettings {
-  const db = getDatabase();
-  const row = db.prepare('SELECT value FROM settings WHERE key = ?').get('store_settings') as unknown as DbSettingRow | undefined;
   const defaults: StoreSettings = {
     title: 'Beautiful Adenium Plants for Your Garden',
     subtitle: 'Rare varieties, healthy plants and complete care support.',
@@ -954,13 +952,19 @@ export function getStoreSettings(): StoreSettings {
     deliveryCharge: 69,
     freeDeliveryThreshold: 999,
   };
-  if (row) {
-    try {
-      const parsed = JSON.parse(row.value);
-      return { ...defaults, ...parsed };
-    } catch {
-      // fallback
+  try {
+    const db = getDatabase();
+    const row = db.prepare('SELECT value FROM settings WHERE key = ?').get('store_settings') as unknown as DbSettingRow | undefined;
+    if (row) {
+      try {
+        const parsed = JSON.parse(row.value);
+        return { ...defaults, ...parsed };
+      } catch {
+        // fallback
+      }
     }
+  } catch (err) {
+    console.error('getStoreSettings database read error:', err);
   }
   return defaults;
 }

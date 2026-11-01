@@ -140,8 +140,9 @@ export function ProductCard({ product, compact = false, collection = false }: { 
 }
 
 function SiteHeader({ modal = false }: { modal?: boolean }) {
-  const { cart, setPanel } = useStore();
-  const count = Object.values(cart).reduce((sum, n) => sum + n, 0);
+  const { cart, setPanel, products: catalog } = useStore();
+  const validItems = catalog.filter(p => cart[p.id] && cart[p.id] > 0);
+  const count = validItems.length > 0 ? validItems.reduce((sum, p) => sum + cart[p.id], 0) : 0;
   return (
     <header className="site-header" id={modal ? undefined : 'home'}>
       <div className="header-inner">
@@ -276,10 +277,33 @@ export function Storefront({ children }: { children: React.ReactNode }) {
     };
   }, [panel, info]);
 
-  const count = Object.values(cart).reduce((sum, n) => sum + n, 0);
-  const subtotal = catalog
-    .filter(p => cart[p.id])
-    .reduce((sum, p) => sum + p.price * cart[p.id], 0);
+  // Sanitize cart items once catalog is loaded
+  useEffect(() => {
+    if (catalog.length > 0 && Object.keys(cart).length > 0) {
+      const validIds = new Set(catalog.map(p => p.id));
+      let changed = false;
+      const cleanCart: Cart = {};
+      for (const [id, qty] of Object.entries(cart)) {
+        if (validIds.has(id) && qty > 0) {
+          cleanCart[id] = qty;
+        } else {
+          changed = true;
+        }
+      }
+      if (changed) {
+        setCart(cleanCart);
+        try {
+          localStorage.setItem('kiaan-cart', JSON.stringify(cleanCart));
+        } catch {
+          // ignore
+        }
+      }
+    }
+  }, [catalog]);
+
+  const validItems = catalog.filter(p => cart[p.id] && cart[p.id] > 0);
+  const count = validItems.reduce((sum, p) => sum + cart[p.id], 0);
+  const subtotal = validItems.reduce((sum, p) => sum + p.price * cart[p.id], 0);
 
   function add(product: Product, amount = 1) {
     setCart(c => ({ ...c, [product.id]: Math.min(99, (c[product.id] || 0) + amount) }));
@@ -410,7 +434,7 @@ export function Storefront({ children }: { children: React.ReactNode }) {
         </svg>
       </footer>
 
-      {hydrated && count > 0 && panel !== 'cart' && pathname !== '/checkout' && (
+      {hydrated && count > 0 && subtotal > 0 && panel !== 'cart' && pathname !== '/checkout' && (
         <button
           type="button"
           className="floating-cart-btn"
@@ -631,14 +655,14 @@ export function NewsletterForm({ footer = false }: { footer?: boolean }) {
 function CartContent() {
   const { cart, quantity, remove, setPanel, products: catalog, settings } = useStore();
 
-  const count = Object.values(cart).reduce((sum, n) => sum + n, 0);
-  const items = catalog.filter(p => cart[p.id]);
+  const items = catalog.filter(p => cart[p.id] && cart[p.id] > 0);
+  const count = items.reduce((sum, p) => sum + cart[p.id], 0);
   const subtotal = items.reduce((sum, p) => sum + p.price * cart[p.id], 0);
 
   const freeThreshold = settings.freeDeliveryThreshold ?? 999;
   const deliveryCharge = settings.deliveryCharge ?? 69;
   const isFreeDelivery = freeThreshold > 0 && subtotal >= freeThreshold;
-  const shippingFee = count > 0 ? (isFreeDelivery ? 0 : deliveryCharge) : 0;
+  const shippingFee = count > 0 && subtotal > 0 ? (isFreeDelivery ? 0 : deliveryCharge) : 0;
   const grandTotal = subtotal + shippingFee;
 
   const minVal = settings.minOrderValue ?? 0;
@@ -647,7 +671,7 @@ function CartContent() {
   const belowMinQty = minQty > 1 && count < minQty;
   const canCheckout = !belowMinValue && !belowMinQty;
 
-  return count === 0 ? (
+  return count === 0 || items.length === 0 ? (
     <div className="empty-state">
       <Icon name="cart" />
       <h3>Your garden starts here</h3>
