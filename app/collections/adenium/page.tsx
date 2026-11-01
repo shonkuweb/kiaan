@@ -1,7 +1,8 @@
 import type { Metadata } from 'next';
-import { getProducts } from '../../lib/server/db';
+import { getProducts, type Product } from '../../lib/server/db';
 import { CollectionPage } from '../../components/shop-pages';
 
+export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
 export const metadata: Metadata = {
@@ -10,6 +11,11 @@ export const metadata: Metadata = {
 };
 
 export default async function Page() {
-  const products = getProducts({ categoryId: 'adenium' });
+  let products: Product[] = [];
+  try {
+    products = getProducts({ categoryId: 'adenium' });
+  } catch (err) {
+    console.error('Failed to load adenium collection products:', err);
+  }
   return <CollectionPage initialProducts={products} />;
 }

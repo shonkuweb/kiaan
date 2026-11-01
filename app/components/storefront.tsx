@@ -117,12 +117,12 @@ export function ProductCard({ product, compact = false, collection = false }: { 
         <h3><Link href={`/products/${product.id}`}>{product.name}</Link></h3>
         {collection && <p className="product-rating"><span>★</span> {(product.rating || 4.9).toFixed(1)} ({product.reviews || 0})</p>}
         <div className="product-price-wrapper">
-          {product.originalPrice && product.originalPrice > product.price ? (
+          {typeof product.originalPrice === 'number' && product.originalPrice > (product.price || 0) && product.originalPrice > 0 ? (
             <div className="product-price-split">
               <span className="price-offer">{money(product.price)}</span>
               <span className="price-original">{money(product.originalPrice)}</span>
               <span className="price-discount-pill">
-                {Math.round(((product.originalPrice - product.price) / product.originalPrice) * 100)}% OFF
+                {Math.round(((product.originalPrice - (product.price || 0)) / product.originalPrice) * 100)}% OFF
               </span>
             </div>
           ) : (

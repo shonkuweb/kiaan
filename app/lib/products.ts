@@ -29,7 +29,12 @@ export type Category = {
   createdAt?: string;
 };
 
-export const money = (amount: number) => `₹${amount.toLocaleString('en-IN')}`;
+export const money = (amount?: number | null | string): string => {
+  if (amount === undefined || amount === null || amount === '') return '₹0';
+  const num = typeof amount === 'number' ? amount : Number(amount);
+  if (isNaN(num)) return '₹0';
+  return `₹${num.toLocaleString('en-IN')}`;
+};
 
 export function getProductImageUrl(p?: { image?: string; images?: string[] } | null): string {
   if (!p) return '/images/hybrid-red.webp';

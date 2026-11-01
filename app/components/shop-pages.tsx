@@ -342,12 +342,12 @@ export function ProductDetails({
           <span>{(product.rating || 4.9).toFixed(1)} ({product.reviews || 0} reviews)</span>
         </div>
         <div className="detail-price-row">
-          {product.originalPrice && product.originalPrice > product.price ? (
+          {typeof product.originalPrice === 'number' && product.originalPrice > (product.price || 0) && product.originalPrice > 0 ? (
             <div className="detail-price-split-wrap">
               <span className="detail-offer-price">{money(product.price)}</span>
               <span className="detail-original-price">{money(product.originalPrice)}</span>
               <span className="detail-discount-tag">
-                {Math.round(((product.originalPrice - product.price) / product.originalPrice) * 100)}% OFF
+                {Math.round(((product.originalPrice - (product.price || 0)) / product.originalPrice) * 100)}% OFF
               </span>
             </div>
           ) : (
