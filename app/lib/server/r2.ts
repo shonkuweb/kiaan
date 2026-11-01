@@ -26,15 +26,51 @@ export async function writeHero(hero: HeroBanner) {
   const { client, bucket } = r2Config();
   await client.send(new PutObjectCommand({ Bucket: bucket, Key: heroKey, Body: JSON.stringify(hero), ContentType: 'application/json', CacheControl: 'no-store' }));
 }
-// Until administrator sign-in is connected, writes are limited to local development.
-// Never expose a credential-backed upload endpoint anonymously in production.
 export function checkLocalAdmin(request: Request): Response | null {
-  const requestHost = request.headers.get('host') || '';
-  const host = new URL(`http://${requestHost || 'invalid'}`).hostname;
+  // Verify admin session cookie
+  const cookieHeader = request.headers.get('cookie') || '';
+  const hasAdminCookie =
+    /(?:^|;\s*)kiaan_admin_session=authenticated(?:\s*;|$)/.test(cookieHeader) ||
+    cookieHeader.includes('kiaan_admin_session=authenticated');
+
+  const requestHost =
+    request.headers.get('x-forwarded-host') ||
+    request.headers.get('host') ||
+    '';
+  const host = requestHost.split(':')[0].toLowerCase();
+  const isLocalhost = ['localhost', '127.0.0.1', '[::1]'].includes(host);
+  const isDev = process.env.NODE_ENV === 'development';
+
+  // Allow authenticated admin, or local development on localhost
+  if (!hasAdminCookie && !(isDev && isLocalhost)) {
+    return Response.json(
+      { error: 'Admin session expired or unauthorized. Please sign in to the admin panel.' },
+      { status: 401 }
+    );
+  }
+
+  // Origin validation when Origin header is present
   const origin = request.headers.get('origin');
-  let originUrl: URL;
-  try { originUrl = new URL(origin || ''); } catch { return Response.json({ error: 'Please upload from the admin panel.' }, { status: 403 }); }
-  if (process.env.NODE_ENV !== 'development' || !['localhost', '127.0.0.1', '[::1]'].includes(host)) return Response.json({ error: 'Admin changes are available in local development until admin sign-in is configured.' }, { status: 403 });
-  if (!['http:', 'https:'].includes(originUrl.protocol) || originUrl.host !== requestHost) return Response.json({ error: 'Please upload from the admin panel.' }, { status: 403 });
+  if (origin) {
+    try {
+      const originUrl = new URL(origin);
+      if (!['http:', 'https:'].includes(originUrl.protocol)) {
+        return Response.json({ error: 'Please submit from the admin panel.' }, { status: 403 });
+      }
+      const originHost = originUrl.hostname.toLowerCase();
+      // Allow matching host or internal/localhost proxy origins
+      if (
+        host &&
+        originHost !== host &&
+        !['localhost', '127.0.0.1', '[::1]'].includes(host) &&
+        !['localhost', '127.0.0.1', '[::1]'].includes(originHost)
+      ) {
+        return Response.json({ error: 'Cross-origin request rejected. Please use the admin panel.' }, { status: 403 });
+      }
+    } catch {
+      return Response.json({ error: 'Please submit from the admin panel.' }, { status: 403 });
+    }
+  }
+
   return null;
 }

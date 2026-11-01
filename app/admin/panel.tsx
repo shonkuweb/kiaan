@@ -239,7 +239,13 @@ export function AdminPanel({ tab }: { tab: Tab }) {
       form.append('image', file);
       const res = await fetch('/api/admin/products/images', { method: 'POST', body: form });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Upload failed');
+      if (!res.ok) {
+        if (res.status === 401 || res.status === 403) {
+          sessionStorage.removeItem('kiaan_admin_auth');
+          setIsAuthenticated(false);
+        }
+        throw new Error(data.error || 'Upload failed');
+      }
       setCategoryImage(data.url);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to upload image.');
@@ -249,27 +255,28 @@ export function AdminPanel({ tab }: { tab: Tab }) {
   }
 
   useEffect(() => {
-    const localAuth = typeof window !== 'undefined' ? sessionStorage.getItem('kiaan_admin_auth') : null;
-    if (localAuth === 'true') {
-      setIsAuthenticated(true);
-      loadData();
-      return;
-    }
-
     fetch('/api/admin/auth')
       .then(res => (res.ok ? res.json() : { authenticated: false }))
       .then(authData => {
         if (authData.authenticated) {
+          sessionStorage.setItem('kiaan_admin_auth', 'true');
+          setIsAuthenticated(true);
+          loadData();
+        } else {
+          sessionStorage.removeItem('kiaan_admin_auth');
+          setIsAuthenticated(false);
+          setReady(true);
+        }
+      })
+      .catch(() => {
+        const localAuth = typeof window !== 'undefined' ? sessionStorage.getItem('kiaan_admin_auth') : null;
+        if (localAuth === 'true') {
           setIsAuthenticated(true);
           loadData();
         } else {
           setIsAuthenticated(false);
           setReady(true);
         }
-      })
-      .catch(() => {
-        setIsAuthenticated(false);
-        setReady(true);
       });
   }, []);
 
@@ -339,7 +346,7 @@ export function AdminPanel({ tab }: { tab: Tab }) {
     opener.current?.focus();
   }
 
-  async function saveProduct(item: Item): Promise<boolean> {
+  async function saveProduct(item: Item): Promise<{ ok: boolean; error?: string }> {
     try {
       const isEdit = Boolean(editingProduct);
       const res = await fetch('/api/admin/products', {
@@ -350,8 +357,13 @@ export function AdminPanel({ tab }: { tab: Tab }) {
 
       const result = await res.json();
       if (!res.ok) {
-        setError(result.error || 'Failed to save product.');
-        return false;
+        if (res.status === 401 || res.status === 403) {
+          sessionStorage.removeItem('kiaan_admin_auth');
+          setIsAuthenticated(false);
+        }
+        const errorMsg = result.error || 'Failed to save product.';
+        setError(errorMsg);
+        return { ok: false, error: errorMsg };
       }
 
       setData(prev => ({
@@ -361,10 +373,11 @@ export function AdminPanel({ tab }: { tab: Tab }) {
       setCategoryId(result.categoryId);
       setMessage(isEdit ? 'Product updated.' : 'Product added.');
       close();
-      return true;
+      return { ok: true };
     } catch {
-      setError('Failed to reach backend database.');
-      return false;
+      const errorMsg = 'Failed to reach backend database.';
+      setError(errorMsg);
+      return { ok: false, error: errorMsg };
     }
   }
 
@@ -375,6 +388,10 @@ export function AdminPanel({ tab }: { tab: Tab }) {
       });
       const result = await res.json();
       if (!res.ok) {
+        if (res.status === 401 || res.status === 403) {
+          sessionStorage.removeItem('kiaan_admin_auth');
+          setIsAuthenticated(false);
+        }
         throw new Error(result.error || 'Failed to delete product.');
       }
       setData(prev => ({
@@ -396,6 +413,10 @@ export function AdminPanel({ tab }: { tab: Tab }) {
       });
       const result = await res.json();
       if (!res.ok) {
+        if (res.status === 401 || res.status === 403) {
+          sessionStorage.removeItem('kiaan_admin_auth');
+          setIsAuthenticated(false);
+        }
         return setError(result.error || 'Failed to remove category.');
       }
       setData(prev => {
@@ -433,7 +454,13 @@ export function AdminPanel({ tab }: { tab: Tab }) {
           ),
         });
         const result = await res.json();
-        if (!res.ok) return setError(result.error || 'Failed to save category.');
+        if (!res.ok) {
+          if (res.status === 401 || res.status === 403) {
+            sessionStorage.removeItem('kiaan_admin_auth');
+            setIsAuthenticated(false);
+          }
+          return setError(result.error || 'Failed to save category.');
+        }
 
         setData(prev => ({
           ...prev,
@@ -489,7 +516,13 @@ export function AdminPanel({ tab }: { tab: Tab }) {
           body: JSON.stringify(payload),
         });
         const result = await res.json();
-        if (!res.ok) return setError(result.error || 'Failed to save settings.');
+        if (!res.ok) {
+          if (res.status === 401 || res.status === 403) {
+            sessionStorage.removeItem('kiaan_admin_auth');
+            setIsAuthenticated(false);
+          }
+          return setError(result.error || 'Failed to save settings.');
+        }
 
         setData(prev => ({ ...prev, settings: result }));
         setMessage('Store settings updated successfully.');
@@ -518,7 +551,13 @@ export function AdminPanel({ tab }: { tab: Tab }) {
           }),
         });
         const result = await res.json();
-        if (!res.ok) return setError(result.error || 'Failed to create manual order.');
+        if (!res.ok) {
+          if (res.status === 401 || res.status === 403) {
+            sessionStorage.removeItem('kiaan_admin_auth');
+            setIsAuthenticated(false);
+          }
+          return setError(result.error || 'Failed to create manual order.');
+        }
 
         setData(prev => ({
           ...prev,
@@ -540,7 +579,13 @@ export function AdminPanel({ tab }: { tab: Tab }) {
         body: JSON.stringify({ id, status: nextStatus }),
       });
       const result = await res.json();
-      if (!res.ok) return setError(result.error || 'Failed to update order status.');
+      if (!res.ok) {
+        if (res.status === 401 || res.status === 403) {
+          sessionStorage.removeItem('kiaan_admin_auth');
+          setIsAuthenticated(false);
+        }
+        return setError(result.error || 'Failed to update order status.');
+      }
       setData(prev => ({
         ...prev,
         orders: prev.orders.map(o => (o.id === id ? { ...o, status: nextStatus } : o)),
@@ -599,7 +644,13 @@ WhatsApp: +91 62894 17338`;
         method: 'DELETE',
       });
       const dataRes = await res.json();
-      if (!res.ok) throw new Error(dataRes.error || 'Failed to delete order');
+      if (!res.ok) {
+        if (res.status === 401 || res.status === 403) {
+          sessionStorage.removeItem('kiaan_admin_auth');
+          setIsAuthenticated(false);
+        }
+        throw new Error(dataRes.error || 'Failed to delete order');
+      }
       setData(prev => ({
         ...prev,
         orders: prev.orders.filter(o => o.id !== order.id),

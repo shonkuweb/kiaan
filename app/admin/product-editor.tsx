@@ -5,7 +5,7 @@ import type { InventoryProduct, ProductCategory } from './product-types';
 
 export function ProductEditor({ product, categories, categoryId, onClose, onSave }: {
   product: InventoryProduct | null; categories: ProductCategory[]; categoryId: string;
-  onClose: () => void; onSave: (product: InventoryProduct) => boolean | Promise<boolean>;
+  onClose: () => void; onSave: (product: InventoryProduct) => boolean | Promise<boolean | { ok: boolean; error?: string } | void>;
 }) {
   const dialog = useRef<HTMLDialogElement>(null);
   const fileInput = useRef<HTMLInputElement>(null);
@@ -75,26 +75,40 @@ export function ProductEditor({ product, categories, categoryId, onClose, onSave
       return setError('Add between 1 and 3 square product photos.');
     }
 
-    const saved = await onSave({
-      id: product?.id || crypto.randomUUID(),
-      name: text('name'),
-      categoryId: text('categoryId'),
-      price,
-      stock,
-      image: images[0] || product?.image || '',
-      images,
-      description: text('description'),
-      isFeatured,
-      color: product?.color || 'pink',
-      rating: product?.rating ?? 4.9,
-      reviews: product?.reviews ?? 0,
-      potSize: text('potSize'),
-      plantHeight: text('plantHeight'),
-      details: text('details'),
-      shippingInfo: text('shippingInfo'),
-      returnsInfo: text('returnsInfo'),
-    });
-    if (!saved) setError('Your browser could not save this product. Free some storage and try again.');
+    setUploading(true);
+    try {
+      const result = await onSave({
+        id: product?.id || crypto.randomUUID(),
+        name: text('name'),
+        categoryId: text('categoryId'),
+        price,
+        stock,
+        image: images[0] || product?.image || '',
+        images,
+        description: text('description'),
+        isFeatured,
+        color: product?.color || 'pink',
+        rating: product?.rating ?? 4.9,
+        reviews: product?.reviews ?? 0,
+        potSize: text('potSize'),
+        plantHeight: text('plantHeight'),
+        details: text('details'),
+        shippingInfo: text('shippingInfo'),
+        returnsInfo: text('returnsInfo'),
+      });
+
+      if (typeof result === 'object' && result !== null) {
+        if (!result.ok) {
+          setError(result.error || 'Failed to save product. Please try again.');
+        }
+      } else if (result === false) {
+        setError('Failed to save product. Please try again.');
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to save product. Please try again.');
+    } finally {
+      setUploading(false);
+    }
   }
 
   function close() {
