@@ -2,10 +2,8 @@
 
 import { useState } from 'react';
 import Link from 'next/link';
-import { useStore, Icon, type IconName } from '../components/storefront';
+import { useStore, Icon } from '../components/storefront';
 import { money, getProductImageUrl } from '../lib/products';
-
-type PaymentMethod = 'cod' | 'upi' | 'whatsapp';
 
 interface OrderSuccessData {
   orderId: string;
@@ -24,7 +22,6 @@ interface OrderSuccessData {
   subtotal: number;
   shipping: number;
   total: number;
-  paymentMethod: string;
   date: string;
 }
 
@@ -43,11 +40,6 @@ export function CheckoutClient() {
     notes: '',
   });
 
-  const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('cod');
-  const [promoCode, setPromoCode] = useState('');
-  const [promoDiscount, setPromoDiscount] = useState(0);
-  const [promoStatus, setPromoStatus] = useState<{ message: string; isError: boolean } | null>(null);
-
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [orderResult, setOrderResult] = useState<OrderSuccessData | null>(null);
@@ -61,26 +53,7 @@ export function CheckoutClient() {
   const freeShippingThreshold = 999;
   const isFreeShipping = subtotal >= freeShippingThreshold;
   const shippingFee = isFreeShipping ? 0 : (subtotal > 0 ? 69 : 0);
-  const totalAmount = Math.max(0, subtotal + shippingFee - promoDiscount);
-
-  function applyPromo(e: React.FormEvent) {
-    e.preventDefault();
-    const code = promoCode.trim().toUpperCase();
-    if (!code) return;
-
-    if (code === 'WELCOME50' || code === 'KIAAN50' || code === 'FIRSTPLANT') {
-      const discount = Math.min(50, subtotal);
-      setPromoDiscount(discount);
-      setPromoStatus({ message: `Coupon ${code} applied! ₹50 off your order.`, isError: false });
-    } else if (code === 'GREEN10') {
-      const discount = Math.round(subtotal * 0.1);
-      setPromoDiscount(discount);
-      setPromoStatus({ message: `Coupon GREEN10 applied! 10% off (₹${discount}).`, isError: false });
-    } else {
-      setPromoDiscount(0);
-      setPromoStatus({ message: 'Invalid or expired coupon code. Try "WELCOME50".', isError: true });
-    }
-  }
+  const totalAmount = subtotal + shippingFee;
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -131,7 +104,7 @@ export function CheckoutClient() {
         state: form.state.trim(),
         pincode: cleanPin,
         notes: form.notes.trim(),
-        paymentMethod,
+        paymentMethod: 'Pay on Delivery / Direct Nursery Order',
         items: items.map(p => ({
           id: p.id,
           name: p.name,
@@ -141,7 +114,6 @@ export function CheckoutClient() {
         })),
         subtotal,
         shipping: shippingFee,
-        discount: promoDiscount,
         total: totalAmount,
       };
 
@@ -170,7 +142,6 @@ export function CheckoutClient() {
         subtotal,
         shipping: shippingFee,
         total: totalAmount,
-        paymentMethod,
         date: data.date || new Date().toISOString(),
       });
 
@@ -186,7 +157,7 @@ export function CheckoutClient() {
   // --- ORDER SUCCESS VIEW ---
   if (orderResult) {
     const shortId = orderResult.orderId.slice(0, 8).toUpperCase();
-    const whatsappText = `Hello Kiaan Nursery & Agro Care!\nI have placed an order on your site.\n\n*Order ID:* #KIAAN-${shortId}\n*Customer:* ${orderResult.customer.name}\n*Phone:* ${orderResult.customer.phone}\n*Items:*\n${orderResult.items.map(i => `• ${i.name} × ${i.quantity} (₹${i.price * i.quantity})`).join('\n')}\n*Total:* ₹${orderResult.total}\n*Delivery Address:* ${orderResult.customer.address}\n*Payment Method:* ${orderResult.paymentMethod === 'cod' ? 'Cash on Delivery' : orderResult.paymentMethod === 'upi' ? 'UPI / Online' : 'WhatsApp Assisted'}\n\nPlease confirm availability and dispatch details. Thank you!`;
+    const whatsappText = `Hello Kiaan Nursery & Agro Care!\nI have placed an order on your site.\n\n*Order ID:* #KIAAN-${shortId}\n*Customer:* ${orderResult.customer.name}\n*Phone:* ${orderResult.customer.phone}\n*Items:*\n${orderResult.items.map(i => `• ${i.name} × ${i.quantity} (₹${i.price * i.quantity})`).join('\n')}\n*Total:* ₹${orderResult.total}\n*Delivery Address:* ${orderResult.customer.address}\n\nPlease confirm availability and dispatch details. Thank you!`;
 
     return (
       <main className="checkout-success-page">
@@ -213,16 +184,6 @@ export function CheckoutClient() {
               <div className="summary-row">
                 <span>Status</span>
                 <span className="status-badge pending">Received &bull; Pending Dispatch</span>
-              </div>
-              <div className="summary-row">
-                <span>Payment Mode</span>
-                <strong>
-                  {orderResult.paymentMethod === 'cod'
-                    ? 'Cash on Delivery (COD)'
-                    : orderResult.paymentMethod === 'upi'
-                    ? 'UPI / Online Payment'
-                    : 'WhatsApp Assisted Order'}
-                </strong>
               </div>
               <div className="summary-row">
                 <span>Delivery To</span>
@@ -464,67 +425,6 @@ export function CheckoutClient() {
               </div>
             </section>
 
-            {/* Step 3: Payment Method */}
-            <section className="form-card">
-              <div className="form-card-header">
-                <span className="step-number">3</span>
-                <h2>Payment Method</h2>
-              </div>
-
-              <div className="payment-options-grid" role="radiogroup" aria-label="Select Payment Method">
-                <label className={`payment-card ${paymentMethod === 'cod' ? 'selected' : ''}`}>
-                  <input
-                    type="radio"
-                    name="paymentMethod"
-                    value="cod"
-                    checked={paymentMethod === 'cod'}
-                    onChange={() => setPaymentMethod('cod')}
-                  />
-                  <div className="payment-card-content">
-                    <div className="payment-card-title">
-                      <strong>Cash on Delivery (COD)</strong>
-                      <span className="payment-badge green">Popular</span>
-                    </div>
-                    <p>Pay comfortably via cash or UPI to the delivery executive at your doorstep.</p>
-                  </div>
-                </label>
-
-                <label className={`payment-card ${paymentMethod === 'upi' ? 'selected' : ''}`}>
-                  <input
-                    type="radio"
-                    name="paymentMethod"
-                    value="upi"
-                    checked={paymentMethod === 'upi'}
-                    onChange={() => setPaymentMethod('upi')}
-                  />
-                  <div className="payment-card-content">
-                    <div className="payment-card-title">
-                      <strong>UPI / Instant Online Payment</strong>
-                      <span className="payment-badge">Fast &amp; Direct</span>
-                    </div>
-                    <p>Pay via Google Pay, PhonePe, Paytm, or BHIM. Instant order confirmation.</p>
-                  </div>
-                </label>
-
-                <label className={`payment-card ${paymentMethod === 'whatsapp' ? 'selected' : ''}`}>
-                  <input
-                    type="radio"
-                    name="paymentMethod"
-                    value="whatsapp"
-                    checked={paymentMethod === 'whatsapp'}
-                    onChange={() => setPaymentMethod('whatsapp')}
-                  />
-                  <div className="payment-card-content">
-                    <div className="payment-card-title">
-                      <strong>WhatsApp Assisted Order</strong>
-                      <span className="payment-badge">Plant Lovers</span>
-                    </div>
-                    <p>Receive live photos of the actual plant from our Habra nursery before payment.</p>
-                  </div>
-                </label>
-              </div>
-            </section>
-
             {/* Place Order CTA */}
             <div className="checkout-submit-wrap">
               <button
@@ -544,7 +444,7 @@ export function CheckoutClient() {
 
               <div className="checkout-security-guarantee">
                 <Icon name="shield" />
-                <span>Encrypted &bull; 100% Safe Transit &bull; Hand-packaged at Habra</span>
+                <span>Pay on Delivery &bull; 100% Safe Botanical Transit &bull; Hand-packaged at Habra</span>
               </div>
             </div>
           </form>
@@ -565,7 +465,7 @@ export function CheckoutClient() {
                   return (
                     <article key={p.id} className="checkout-item-row">
                       <div className="checkout-item-thumb">
-                        <img src={img} alt={p.name} width="64" height="64" />
+                        <img src={img} alt={p.name} width="52" height="52" />
                       </div>
                       <div className="checkout-item-details">
                         <h4>{p.name}</h4>
@@ -603,24 +503,6 @@ export function CheckoutClient() {
                 })}
               </div>
 
-              {/* Promo Form */}
-              <form className="checkout-promo-box" onSubmit={applyPromo}>
-                <div className="promo-input-row">
-                  <input
-                    type="text"
-                    placeholder="Coupon code (e.g. WELCOME50)"
-                    value={promoCode}
-                    onChange={e => setPromoCode(e.target.value)}
-                  />
-                  <button type="submit" className="pill dark promo-apply-btn">Apply</button>
-                </div>
-                {promoStatus && (
-                  <p className={`promo-status-msg ${promoStatus.isError ? 'error' : 'success'}`}>
-                    {promoStatus.message}
-                  </p>
-                )}
-              </form>
-
               {/* Free shipping indicator */}
               {!isFreeShipping && (
                 <div className="free-shipping-progress">
@@ -652,12 +534,6 @@ export function CheckoutClient() {
                     )}
                   </dd>
                 </div>
-                {promoDiscount > 0 && (
-                  <div className="breakdown-row discount">
-                    <dt>Coupon Discount</dt>
-                    <dd>-{money(promoDiscount)}</dd>
-                  </div>
-                )}
                 <div className="breakdown-row grand-total">
                   <dt>Total Amount</dt>
                   <dd>{money(totalAmount)}</dd>
