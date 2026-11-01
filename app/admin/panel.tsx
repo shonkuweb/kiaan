@@ -12,7 +12,18 @@ import type { InventoryProduct, ProductCategory } from './product-types';
 type Tab = 'inventory' | 'orders' | 'categories' | 'settings';
 type Category = ProductCategory;
 type Item = InventoryProduct;
-type Order = { id: string; customer: string; details: string; total: number; status: string; date: string };
+type Order = {
+  id: string;
+  customer: string;
+  details: string;
+  total: number;
+  status: string;
+  razorpayOrderId?: string;
+  paymentId?: string;
+  paymentStatus?: string;
+  paymentMethod?: string;
+  date: string;
+};
 type Settings = {
   title: string;
   subtitle: string;
@@ -49,13 +60,114 @@ const initial: Data = {
   settings: initialSettings,
 };
 
-const statuses = ['Pending', 'Confirmed', 'Packed', 'Shipped', 'Delivered', 'Cancelled'];
+const statuses = ['Confirmed', 'Packed', 'Shipped', 'Delivered', 'Cancelled'];
 const tabs: { id: Tab; label: string; href: string; icon: IconName }[] = [
   { id: 'inventory', label: 'Inventory', href: '/admin', icon: 'box' },
   { id: 'orders', label: 'Orders', href: '/admin/orders', icon: 'file' },
   { id: 'categories', label: 'Categories', href: '/admin/categories', icon: 'tag' },
   { id: 'settings', label: 'Store settings', href: '/admin/settings', icon: 'grid' },
 ];
+
+function parseCustomer(raw: string) {
+  const parts = (raw || '').split('|').map(s => s.trim());
+  const name = parts[0] || 'Customer';
+  let phone = '';
+  let email = '';
+
+  for (let i = 1; i < parts.length; i++) {
+    const part = parts[i];
+    if (part.toLowerCase().includes('ph:') || /^\+?\d{10,12}$/.test(part.replace(/[\s-]/g, ''))) {
+      phone = part.replace(/^ph:\s*/i, '').trim();
+    } else if (part.includes('@')) {
+      email = part.trim();
+    }
+  }
+
+  if (!phone) {
+    const phoneMatch = raw.match(/(?:\+91[\s-]?)?[6-9]\d{9}/);
+    if (phoneMatch) phone = phoneMatch[0];
+  }
+  if (!email) {
+    const emailMatch = raw.match(/[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/);
+    if (emailMatch) email = emailMatch[0];
+  }
+
+  const cleanPhone = phone.replace(/\D/g, '').slice(-10);
+  return { name, phone: cleanPhone, rawPhone: phone, email };
+}
+
+function parseOrderDetails(detailsStr: string) {
+  const lines = (detailsStr || '').split('\n').map(l => l.trim()).filter(Boolean);
+  let itemsText = '';
+  let addressText = '';
+  let shippingText = '';
+  let notesText = '';
+  let paymentText = '';
+  let razorpayOrderId = '';
+
+  if (lines.length === 1 && detailsStr.includes(' | ')) {
+    const pipeParts = detailsStr.split(' | ').map(p => p.trim());
+    for (const part of pipeParts) {
+      if (part.toLowerCase().startsWith('delivery:')) {
+        addressText = part.replace(/^delivery:\s*/i, '');
+      } else if (part.toLowerCase().startsWith('notes:')) {
+        notesText = part.replace(/^notes:\s*/i, '');
+      } else if (part.toLowerCase().startsWith('payment:')) {
+        paymentText = part.replace(/^payment:\s*/i, '');
+      } else if (part.toLowerCase().includes('shipping:')) {
+        shippingText = part;
+      } else if (!itemsText) {
+        itemsText = part;
+      }
+    }
+  } else {
+    for (const line of lines) {
+      if (line.toLowerCase().startsWith('items:')) {
+        itemsText = line.replace(/^items:\s*/i, '');
+      } else if (line.toLowerCase().startsWith('delivery address:') || line.toLowerCase().startsWith('delivery:')) {
+        addressText = line.replace(/^(?:delivery address|delivery):\s*/i, '');
+      } else if (line.toLowerCase().startsWith('shipping:')) {
+        shippingText = line.replace(/^shipping:\s*/i, '');
+      } else if (line.toLowerCase().startsWith('notes:')) {
+        notesText = line.replace(/^notes:\s*/i, '');
+      } else if (line.toLowerCase().startsWith('razorpay order id:')) {
+        razorpayOrderId = line.replace(/^razorpay order id:\s*/i, '');
+      } else if (line.toLowerCase().startsWith('payment:')) {
+        paymentText = line.replace(/^payment:\s*/i, '');
+      } else if (!itemsText && !addressText) {
+        itemsText = line;
+      }
+    }
+  }
+
+  const rawItems = itemsText ? itemsText.split(/[;,]\s*(?=[A-Za-z0-9])/).map(s => s.trim()).filter(Boolean) : [];
+
+  return {
+    rawItems: rawItems.length > 0 ? rawItems : (itemsText ? [itemsText] : []),
+    address: addressText,
+    shipping: shippingText,
+    notes: notesText,
+    paymentText,
+    razorpayOrderId,
+  };
+}
+
+function getStatusTheme(status: string) {
+  switch (status) {
+    case 'Confirmed':
+      return { bg: '#e4f5e2', color: '#165e23', dot: '#238636' };
+    case 'Packed':
+      return { bg: '#e0effa', color: '#105282', dot: '#1f6feb' };
+    case 'Shipped':
+      return { bg: '#f3e8ff', color: '#692996', dot: '#8957e5' };
+    case 'Delivered':
+      return { bg: '#dcfce7', color: '#15803d', dot: '#16a34a' };
+    case 'Cancelled':
+      return { bg: '#fee2e2', color: '#991b1b', dot: '#dc2626' };
+    default:
+      return { bg: '#e4f5e2', color: '#165e23', dot: '#238636' };
+  }
+}
 
 export function AdminPanel({ tab }: { tab: Tab }) {
   const [data, setData] = useState<Data>(initial);
@@ -66,6 +178,10 @@ export function AdminPanel({ tab }: { tab: Tab }) {
   const [isLoggingIn, setIsLoggingIn] = useState(false);
   const [query, setQuery] = useState('');
   const [filter, setFilter] = useState('All orders');
+  const [orderFilterTab, setOrderFilterTab] = useState<'all' | 'to-fulfil' | 'confirmed' | 'packed' | 'shipped' | 'delivered' | 'cancelled'>('all');
+  const [copiedOrderId, setCopiedOrderId] = useState<string | null>(null);
+  const [orderToDelete, setOrderToDelete] = useState<Order | null>(null);
+  const [printOrder, setPrintOrder] = useState<Order | null>(null);
   const [categoryId, setCategoryId] = useState('');
   const [editingProduct, setEditingProduct] = useState<Item | null>(null);
   const [editingCategory, setEditingCategory] = useState<Category | null>(null);
@@ -381,6 +497,38 @@ export function AdminPanel({ tab }: { tab: Tab }) {
       } catch {
         setError('Failed to save settings.');
       }
+    } else if (modal === 'order') {
+      const customer = value('customer');
+      const details = value('details');
+      const total = Number(value('total'));
+
+      if (!customer) return setError('Customer name & phone are required.');
+      if (!details) return setError('Ordered items & address are required.');
+      if (!Number.isFinite(total) || total <= 0) return setError('Enter a valid order total amount.');
+
+      try {
+        const res = await fetch('/api/admin/orders', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            customer,
+            details,
+            total,
+            status: 'Confirmed',
+          }),
+        });
+        const result = await res.json();
+        if (!res.ok) return setError(result.error || 'Failed to create manual order.');
+
+        setData(prev => ({
+          ...prev,
+          orders: [result, ...prev.orders],
+        }));
+        setMessage('Manual confirmed order recorded.');
+        close();
+      } catch {
+        setError('Could not reach backend.');
+      }
     }
   }
 
@@ -403,6 +551,66 @@ export function AdminPanel({ tab }: { tab: Tab }) {
     }
   }
 
+  function copyOrderId(id: string) {
+    const shortId = id.slice(0, 8).toUpperCase();
+    navigator.clipboard.writeText(`#KIAAN-${shortId}`);
+    setCopiedOrderId(id);
+    setTimeout(() => setCopiedOrderId(null), 2000);
+  }
+
+  function copyDispatchLabel(order: Order) {
+    const cust = parseCustomer(order.customer);
+    const det = parseOrderDetails(order.details);
+    const shortId = order.id.slice(0, 8).toUpperCase();
+    const formattedDate = new Date(order.date).toLocaleDateString('en-IN', {
+      day: 'numeric',
+      month: 'short',
+      year: 'numeric',
+    });
+
+    const label = `KIAAN NURSERY & AGRO CARE - DISPATCH LABEL
+===================================================
+ORDER REFERENCE : #KIAAN-${shortId}
+ORDER DATE      : ${formattedDate}
+PAYMENT STATUS  : 100% PAID VIA RAZORPAY
+TOTAL AMOUNT    : ₹${order.total}
+===================================================
+DELIVER TO:
+Recipient : ${cust.name}
+Mobile    : +91 ${cust.phone || cust.rawPhone || 'N/A'}
+Address   : ${det.address || 'Address on record'}
+${det.notes ? `Instructions: ${det.notes}\n` : ''}===================================================
+ITEMS:
+${det.rawItems.map(i => `• ${i}`).join('\n')}
+===================================================
+FROM:
+Kiaan Nursery & Agro Care
+Habra, North 24 Parganas, West Bengal - 743263
+WhatsApp: +91 62894 17338`;
+
+    navigator.clipboard.writeText(label);
+    setCopiedOrderId(`label-${order.id}`);
+    setTimeout(() => setCopiedOrderId(null), 2500);
+  }
+
+  async function deleteConfirmedOrder(order: Order) {
+    try {
+      const res = await fetch(`/api/admin/orders?id=${encodeURIComponent(order.id)}`, {
+        method: 'DELETE',
+      });
+      const dataRes = await res.json();
+      if (!res.ok) throw new Error(dataRes.error || 'Failed to delete order');
+      setData(prev => ({
+        ...prev,
+        orders: prev.orders.filter(o => o.id !== order.id),
+      }));
+      setOrderToDelete(null);
+      setMessage('Order deleted.');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not delete order.');
+    }
+  }
+
   const activeCategory = data.categories.find(c => c.id === categoryId) || data.categories[0];
   const categoryProducts = data.products.filter(p => p.categoryId === activeCategory?.id);
   const visibleProducts = categoryProducts.filter(p => p.name.toLowerCase().includes(query.toLowerCase().trim()));
@@ -412,11 +620,37 @@ export function AdminPanel({ tab }: { tab: Tab }) {
     setQuery('');
   }
 
-  const visibleOrders = data.orders.filter(
-    o =>
-      (filter === 'All orders' || o.status === filter) &&
-      `${o.customer} ${o.id} ${o.details}`.toLowerCase().includes(query.toLowerCase().trim())
+  // Filter ONLY confirmed orders (exclude pending payment attempts)
+  const confirmedOrdersList = data.orders.filter(
+    o => o.status !== 'Pending Payment' && o.status !== 'Pending' && o.paymentStatus !== 'pending'
   );
+
+  const toFulfilOrders = confirmedOrdersList.filter(o => ['Confirmed', 'Packed', 'Shipped'].includes(o.status));
+  const confirmedOrders = confirmedOrdersList.filter(o => o.status === 'Confirmed');
+  const packedOrders = confirmedOrdersList.filter(o => o.status === 'Packed');
+  const shippedOrders = confirmedOrdersList.filter(o => o.status === 'Shipped');
+  const deliveredOrders = confirmedOrdersList.filter(o => o.status === 'Delivered');
+  const cancelledOrders = confirmedOrdersList.filter(o => o.status === 'Cancelled');
+
+  const totalRevenue = confirmedOrdersList
+    .filter(o => o.status !== 'Cancelled')
+    .reduce((sum, o) => sum + (Number(o.total) || 0), 0);
+
+  const visibleOrders = confirmedOrdersList.filter(o => {
+    if (orderFilterTab === 'to-fulfil' && !['Confirmed', 'Packed', 'Shipped'].includes(o.status)) return false;
+    if (orderFilterTab === 'confirmed' && o.status !== 'Confirmed') return false;
+    if (orderFilterTab === 'packed' && o.status !== 'Packed') return false;
+    if (orderFilterTab === 'shipped' && o.status !== 'Shipped') return false;
+    if (orderFilterTab === 'delivered' && o.status !== 'Delivered') return false;
+    if (orderFilterTab === 'cancelled' && o.status !== 'Cancelled') return false;
+
+    if (query.trim()) {
+      const q = query.toLowerCase().trim();
+      const match = `${o.customer} ${o.id} ${o.details} ${o.paymentId || ''} ${o.razorpayOrderId || ''}`.toLowerCase();
+      if (!match.includes(q)) return false;
+    }
+    return true;
+  });
   const current = tabs.find(t => t.id === tab)!;
 
   if (isAuthenticated === false) {
@@ -690,62 +924,327 @@ export function AdminPanel({ tab }: { tab: Tab }) {
 
               {tab === 'orders' && (
                 <>
-                  <section className="admin-stats" aria-label="Order summary">
-                    {[
-                      { label: 'Total orders', value: data.orders.length },
-                      { label: 'To fulfil', value: data.orders.filter(o => !['Delivered', 'Cancelled'].includes(o.status)).length },
-                      { label: 'Delivered', value: data.orders.filter(o => o.status === 'Delivered').length },
-                    ].map(s => (
-                      <div className="admin-stat" key={s.label}>
-                        <div>
-                          <p>{s.label}</p>
-                          <strong>{s.value}</strong>
-                        </div>
-                        <span><Icon name="box" /></span>
+                  {/* Confirmed Orders Metrics */}
+                  <section className="admin-order-stats-grid" aria-label="Confirmed order metrics">
+                    <div className="admin-order-stat-card">
+                      <div className="admin-order-stat-icon green">
+                        <Icon name="box" />
                       </div>
-                    ))}
-                  </section>
-
-                  <section className="admin-card">
-                    <div className="admin-card-header">
-                      <div>
-                        <h2>Your orders</h2>
-                        <p>Track store and customer orders and update their progress.</p>
-                      </div>
-                      <div className="admin-order-tools">
-                        <label className="admin-search">
-                          <Icon name="search" />
-                          <input aria-label="Search orders" value={query} onChange={e => setQuery(e.target.value)} placeholder="Search orders…" />
-                        </label>
-                        <select aria-label="Filter order status" value={filter} onChange={e => setFilter(e.target.value)}>
-                          <option>All orders</option>
-                          {statuses.map(s => <option key={s}>{s}</option>)}
-                        </select>
+                      <div className="admin-order-stat-content">
+                        <span className="admin-order-stat-label">Confirmed Orders</span>
+                        <strong className="admin-order-stat-value">{confirmedOrdersList.length}</strong>
+                        <small className="admin-order-stat-sub">Paid &amp; Active</small>
                       </div>
                     </div>
 
-                    {visibleOrders.map(o => (
-                      <article className="admin-order-row" key={o.id}>
-                        <div>
-                          <small>#{o.id.slice(0, 8).toUpperCase()} · {new Date(o.date).toLocaleDateString('en-IN')}</small>
-                          <h3>{o.customer}</h3>
-                          <p>{o.details}</p>
-                        </div>
-                        <strong>{money(o.total)}</strong>
-                        <label>
-                          <span className="sr-only">Status for {o.customer}</span>
-                          <select value={o.status} onChange={e => updateOrderStatus(o.id, e.target.value)}>
-                            {statuses.map(s => <option key={s}>{s}</option>)}
-                          </select>
+                    <div className="admin-order-stat-card">
+                      <div className="admin-order-stat-icon emerald">
+                        <Icon name="shield" />
+                      </div>
+                      <div className="admin-order-stat-content">
+                        <span className="admin-order-stat-label">Total Revenue</span>
+                        <strong className="admin-order-stat-value">{money(totalRevenue)}</strong>
+                        <small className="admin-order-stat-sub">100% Online Paid</small>
+                      </div>
+                    </div>
+
+                    <div className="admin-order-stat-card">
+                      <div className="admin-order-stat-icon purple">
+                        <Icon name="truck" />
+                      </div>
+                      <div className="admin-order-stat-content">
+                        <span className="admin-order-stat-label">To Dispatch</span>
+                        <strong className="admin-order-stat-value">{toFulfilOrders.length}</strong>
+                        <small className="admin-order-stat-sub">{toFulfilOrders.length ? 'Packing & dispatch needed' : 'All dispatched'}</small>
+                      </div>
+                    </div>
+
+                    <div className="admin-order-stat-card">
+                      <div className="admin-order-stat-icon sage">
+                        <Icon name="check" />
+                      </div>
+                      <div className="admin-order-stat-content">
+                        <span className="admin-order-stat-label">Delivered Orders</span>
+                        <strong className="admin-order-stat-value">{deliveredOrders.length}</strong>
+                        <small className="admin-order-stat-sub">Safely received</small>
+                      </div>
+                    </div>
+                  </section>
+
+                  {/* Confirmed Orders Management Section */}
+                  <section className="admin-card">
+                    {/* Toolbar */}
+                    <div className="admin-orders-toolbar">
+                      <div className="admin-orders-title-group">
+                        <h2>
+                          Confirmed Orders
+                          <span className="admin-orders-count-tag">{visibleOrders.length}</span>
+                        </h2>
+                        <p>Only verified &amp; paid orders appear here. Abandoned checkout attempts are filtered out.</p>
+                      </div>
+
+                      <div className="admin-orders-actions-group">
+                        <label className="admin-search">
+                          <Icon name="search" />
+                          <input
+                            aria-label="Search orders"
+                            value={query}
+                            onChange={e => setQuery(e.target.value)}
+                            placeholder="Search customer, phone, #KIAAN…"
+                          />
+                          {query && (
+                            <button
+                              type="button"
+                              className="admin-search-clear"
+                              onClick={() => setQuery('')}
+                              aria-label="Clear search"
+                            >
+                              <Icon name="close" />
+                            </button>
+                          )}
                         </label>
-                      </article>
-                    ))}
+
+                        <button
+                          type="button"
+                          className="admin-button primary"
+                          onClick={() => setModal('order')}
+                        >
+                          <Icon name="plus" />
+                          <span>Manual Order</span>
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Filter Tabs Bar */}
+                    <div className="admin-orders-status-tabs">
+                      {[
+                        { id: 'all', label: 'All Confirmed', count: confirmedOrdersList.length },
+                        { id: 'to-fulfil', label: 'To Dispatch', count: toFulfilOrders.length, highlight: toFulfilOrders.length > 0 },
+                        { id: 'confirmed', label: 'Confirmed', count: confirmedOrders.length },
+                        { id: 'packed', label: 'Packed', count: packedOrders.length },
+                        { id: 'shipped', label: 'Shipped', count: shippedOrders.length },
+                        { id: 'delivered', label: 'Delivered', count: deliveredOrders.length },
+                        ...(cancelledOrders.length > 0 ? [{ id: 'cancelled', label: 'Cancelled', count: cancelledOrders.length }] : []),
+                      ].map(tabItem => (
+                        <button
+                          key={tabItem.id}
+                          type="button"
+                          className={`admin-order-tab-btn ${orderFilterTab === tabItem.id ? 'active' : ''}`}
+                          onClick={() => setOrderFilterTab(tabItem.id as any)}
+                        >
+                          <span>{tabItem.label}</span>
+                          <span className={`tab-count ${tabItem.highlight ? 'highlight' : ''}`}>{tabItem.count}</span>
+                        </button>
+                      ))}
+                    </div>
+
+                    {/* Order Cards List */}
+                    <div className="admin-order-cards-list">
+                      {visibleOrders.map(o => {
+                        const shortId = o.id.slice(0, 8).toUpperCase();
+                        const cust = parseCustomer(o.customer);
+                        const det = parseOrderDetails(o.details);
+                        const statusTheme = getStatusTheme(o.status);
+                        const cleanPhone = cust.phone;
+                        const whatsappMsg = `Hello ${cust.name}! Greetings from Kiaan Nursery & Agro Care, Habra.\n\nRegarding your order *#KIAAN-${shortId}* (Total: ₹${o.total}):\nWe are preparing your plants for dispatch. Please feel free to reply if you need live photos of your Adenium caudex or dispatch updates!\n\nThank you for choosing Kiaan Nursery.`;
+                        const whatsappUrl = cleanPhone ? `https://wa.me/91${cleanPhone}?text=${encodeURIComponent(whatsappMsg)}` : '';
+                        const formattedDate = new Date(o.date).toLocaleDateString('en-IN', {
+                          day: 'numeric',
+                          month: 'short',
+                          year: 'numeric',
+                          hour: '2-digit',
+                          minute: '2-digit',
+                        });
+
+                        return (
+                          <article className="admin-order-card" key={o.id}>
+                            {/* Card Header */}
+                            <div className="admin-order-card-header">
+                              <div className="admin-order-meta-left">
+                                <button
+                                  type="button"
+                                  className="admin-order-ref-pill"
+                                  onClick={() => copyOrderId(o.id)}
+                                  title="Click to copy Order Reference"
+                                >
+                                  <strong>#KIAAN-{shortId}</strong>
+                                  <span className="copy-icon-label">
+                                    {copiedOrderId === o.id ? '✓ Copied' : <Icon name="file" />}
+                                  </span>
+                                </button>
+                                <span className="admin-order-date-text">{formattedDate}</span>
+                                <span className="admin-order-paid-badge">
+                                  <Icon name="shield" />
+                                  <span>Paid Online &bull; Razorpay</span>
+                                  {o.paymentId && <code title="Razorpay Payment ID">{o.paymentId}</code>}
+                                </span>
+                              </div>
+
+                              <div className="admin-order-meta-right">
+                                <div
+                                  className="admin-order-status-pill"
+                                  style={{ background: statusTheme.bg, color: statusTheme.color }}
+                                >
+                                  <span className="status-indicator-dot" style={{ background: statusTheme.dot }} />
+                                  <select
+                                    aria-label={`Change status for order #${shortId}`}
+                                    value={o.status}
+                                    onChange={e => updateOrderStatus(o.id, e.target.value)}
+                                  >
+                                    {statuses.map(s => <option key={s} value={s}>{s}</option>)}
+                                  </select>
+                                </div>
+                                <div className="admin-order-total-amount">
+                                  {money(o.total)}
+                                </div>
+                              </div>
+                            </div>
+
+                            {/* Card Body Grid */}
+                            <div className="admin-order-card-body">
+                              {/* Left: Customer & Delivery Destination */}
+                              <div className="admin-order-customer-col">
+                                <div className="admin-order-cust-header">
+                                  <span className="admin-order-avatar-chip">
+                                    {cust.name.slice(0, 2).toUpperCase()}
+                                  </span>
+                                  <div>
+                                    <h4 className="admin-order-cust-name">{cust.name}</h4>
+                                    <div className="admin-order-contact-row">
+                                      {cust.phone ? (
+                                        <>
+                                          <a href={`tel:+91${cust.phone}`} className="admin-order-phone-link" title="Call customer">
+                                            <Icon name="phone" /> +91 {cust.phone}
+                                          </a>
+                                          {whatsappUrl && (
+                                            <a
+                                              href={whatsappUrl}
+                                              target="_blank"
+                                              rel="noreferrer"
+                                              className="admin-order-wa-pill"
+                                              title="Message on WhatsApp"
+                                            >
+                                              WhatsApp
+                                            </a>
+                                          )}
+                                        </>
+                                      ) : (
+                                        <span className="text-muted">No phone recorded</span>
+                                      )}
+                                    </div>
+                                    {cust.email && (
+                                      <a href={`mailto:${cust.email}`} className="admin-order-email-link">
+                                        <Icon name="mail" /> {cust.email}
+                                      </a>
+                                    )}
+                                  </div>
+                                </div>
+
+                                <div className="admin-order-address-box">
+                                  <Icon name="pin" />
+                                  <div className="admin-order-address-text">
+                                    <span className="address-label">Delivery Address</span>
+                                    <p>{det.address || 'Address on record'}</p>
+                                  </div>
+                                </div>
+
+                                {det.notes && (
+                                  <div className="admin-order-notes-callout">
+                                    <span className="note-title">Customer Instructions:</span>
+                                    <p>&ldquo;{det.notes}&rdquo;</p>
+                                  </div>
+                                )}
+                              </div>
+
+                              {/* Right: Items to Pack */}
+                              <div className="admin-order-items-col">
+                                <div className="admin-order-items-head">
+                                  <span className="items-title">
+                                    <Icon name="leaf" /> Plants &amp; Supplies to Pack
+                                  </span>
+                                  <span className="items-count-badge">
+                                    {det.rawItems.length} {det.rawItems.length === 1 ? 'item' : 'items'}
+                                  </span>
+                                </div>
+
+                                <div className="admin-order-items-list">
+                                  {det.rawItems.map((itemStr, idx) => (
+                                    <div key={idx} className="admin-order-item-row">
+                                      <span className="item-bullet">🌱</span>
+                                      <span className="item-name">{itemStr}</span>
+                                    </div>
+                                  ))}
+                                </div>
+
+                                <div className="admin-order-shipping-pill">
+                                  <Icon name="truck" />
+                                  <span>{det.shipping || (o.total >= 999 ? 'FREE Delivery (₹999+ order)' : 'Standard Delivery ₹69')}</span>
+                                </div>
+                              </div>
+                            </div>
+
+                            {/* Card Footer Actions */}
+                            <div className="admin-order-card-footer">
+                              <div className="admin-order-footer-actions-left">
+                                <button
+                                  type="button"
+                                  className="admin-order-btn action-copy"
+                                  onClick={() => copyDispatchLabel(o)}
+                                  title="Copy postal address and items for courier box label"
+                                >
+                                  <Icon name="file" />
+                                  <span>{copiedOrderId === `label-${o.id}` ? '✓ Copied Label!' : 'Copy Dispatch Label'}</span>
+                                </button>
+
+                                <button
+                                  type="button"
+                                  className="admin-order-btn action-print"
+                                  onClick={() => setPrintOrder(o)}
+                                  title="Print packing slip or invoice"
+                                >
+                                  <Icon name="box" />
+                                  <span>Print Slip</span>
+                                </button>
+
+                                {whatsappUrl && (
+                                  <a
+                                    href={whatsappUrl}
+                                    target="_blank"
+                                    rel="noreferrer"
+                                    className="admin-order-btn action-whatsapp"
+                                    title="Connect on WhatsApp"
+                                  >
+                                    <Icon name="phone" />
+                                    <span>WhatsApp Customer</span>
+                                  </a>
+                                )}
+                              </div>
+
+                              <div className="admin-order-footer-actions-right">
+                                <button
+                                  type="button"
+                                  className="admin-order-delete-btn"
+                                  onClick={() => setOrderToDelete(o)}
+                                  title="Delete order record"
+                                >
+                                  <Icon name="trash" />
+                                </button>
+                              </div>
+                            </div>
+                          </article>
+                        );
+                      })}
+                    </div>
 
                     {!visibleOrders.length && (
                       <div className="admin-empty">
                         <span className="admin-empty-icon"><Icon name="box" /></span>
-                        <h3>{data.orders.length ? 'No matching orders' : 'No orders yet'}</h3>
-                        <p>{data.orders.length ? 'Try a different search or status.' : 'New orders placed through the website will appear here automatically.'}</p>
+                        <h3>{confirmedOrdersList.length ? 'No orders match this filter' : 'No confirmed orders yet'}</h3>
+                        <p>
+                          {confirmedOrdersList.length
+                            ? 'Try selecting a different status tab or search term.'
+                            : 'When customers complete their payment on the store, their confirmed orders will appear here for packing and dispatch.'}
+                        </p>
                       </div>
                     )}
                   </section>
@@ -890,7 +1389,7 @@ export function AdminPanel({ tab }: { tab: Tab }) {
 
       <dialog
         ref={dialog}
-        className="admin-dialog"
+        className={`admin-dialog ${modal === 'settings' ? 'settings-editor' : ''}`}
         onCancel={e => { e.preventDefault(); close(); }}
         onClick={e => { if (e.target === e.currentTarget) close(); }}
       >
@@ -899,13 +1398,15 @@ export function AdminPanel({ tab }: { tab: Tab }) {
             <h2>
               {deleting
                 ? 'Delete product?'
+                : modal === 'settings'
+                ? 'Change Settings'
                 : modal === 'order'
-                ? 'Add manual order'
+                ? 'Record Confirmed Order'
                 : modal === 'category'
                 ? editingCategory
                   ? 'Edit category'
                   : 'Add category'
-                : 'Visibility'}
+                : 'Settings'}
             </h2>
             <button className="admin-icon-button" aria-label="Close dialog" onClick={close}>
               <Icon name="close" />
@@ -922,6 +1423,43 @@ export function AdminPanel({ tab }: { tab: Tab }) {
             </>
           ) : (
             <form onSubmit={submit} key={modal + (editingCategory ? editingCategory.id : 'new')}>
+              {modal === 'order' && (
+                <>
+                  <p>Record a confirmed phone, WhatsApp, or nursery walk-in order. It will be added as Confirmed immediately.</p>
+                  <label>
+                    Customer Name &amp; Phone Number *
+                    <input
+                      name="customer"
+                      required
+                      maxLength={100}
+                      placeholder="e.g. Ranita Dev | Ph: 9876543210"
+                    />
+                  </label>
+                  <label>
+                    Items &amp; Delivery Address *
+                    <textarea
+                      name="details"
+                      rows={4}
+                      required
+                      maxLength={1500}
+                      placeholder="Items: Double Dark Red Adenium (Qty: 2, ₹599 each)&#10;Delivery Address: Flat 3B, Jessore Road, Habra - 743263"
+                    />
+                  </label>
+                  <label>
+                    Order Total (₹) *
+                    <input
+                      name="total"
+                      type="number"
+                      min="1"
+                      max="10000000"
+                      step="1"
+                      required
+                      placeholder="e.g. 1198"
+                    />
+                  </label>
+                </>
+              )}
+
               {modal === 'category' && (
                 <>
                   <label>
@@ -1012,39 +1550,149 @@ export function AdminPanel({ tab }: { tab: Tab }) {
                 </>
               )}
 
-              {modal === 'order' && (
-                <>
-                  <p>Use this for a phone or WhatsApp enquiry. No payment is collected here.</p>
-                  <label>Customer name<input name="customer" required maxLength={100} /></label>
-                  <label>Products & delivery notes<textarea name="details" rows={4} required maxLength={1500} placeholder="Products, quantities, contact and delivery details" /></label>
-                  <label>Order total (₹)<input name="total" type="number" min="0.01" max="10000000" step="0.01" required /></label>
-                </>
-              )}
+              {modal === 'settings' && (
+                <div className="admin-settings-form-body">
+                  <div className="admin-settings-group">
+                    <div className="admin-settings-group-header">
+                      <Icon name="shield" />
+                      <h3>Admin Panel Password</h3>
+                    </div>
+                    <p className="admin-settings-group-desc">
+                      Change the password required to access this admin panel. Leave blank if you don&apos;t want to change it.
+                    </p>
+                    <div className="admin-settings-fields-grid">
+                      <label style={{ gridColumn: 'span 2' }}>
+                        <span>Current Admin Password</span>
+                        <input
+                          type="password"
+                          name="currentPassword"
+                          placeholder="Required only when setting a new password"
+                          autoComplete="current-password"
+                        />
+                      </label>
+                      <label>
+                        <span>New Password</span>
+                        <input
+                          type="password"
+                          name="newPassword"
+                          placeholder="At least 4 characters"
+                          autoComplete="new-password"
+                        />
+                      </label>
+                      <label>
+                        <span>Confirm New Password</span>
+                        <input
+                          type="password"
+                          name="confirmPassword"
+                          placeholder="Repeat new password"
+                          autoComplete="new-password"
+                        />
+                      </label>
+                    </div>
+                  </div>
 
-              {modal === 'visibility' && (
-                <>
-                  <p>Choose the homepage sections to display on your storefront.</p>
-                  {[
-                    { key: 'hero', label: 'Hero banner', text: 'Your homepage welcome banner' },
-                    { key: 'featured', label: 'Featured plants', text: 'A selection of your Adenium plants' },
-                    { key: 'reviews', label: 'Customer reviews', text: 'Ratings and customer stories' },
-                    { key: 'newsletter', label: 'Newsletter', text: 'The new arrivals signup section' },
-                  ].map(s => (
-                    <label className="admin-toggle-row" key={s.key}>
-                      <span>
-                        <strong>{s.label}</strong>
-                        <small>{s.text}</small>
-                      </span>
-                      <input
-                        type="checkbox"
-                        name={s.key}
-                        defaultChecked={data.settings[s.key as keyof Settings] as boolean}
-                        role="switch"
-                      />
-                      <span className="admin-toggle-track" aria-hidden="true" />
-                    </label>
-                  ))}
-                </>
+                  <div className="admin-settings-group">
+                    <div className="admin-settings-group-header">
+                      <Icon name="tag" />
+                      <h3>Order Limits & Minimums</h3>
+                    </div>
+                    <p className="admin-settings-group-desc">
+                      Enforce minimum cart values or quantities for customer checkout across the storefront.
+                    </p>
+                    <div className="admin-settings-fields-grid">
+                      <label>
+                        <span>Minimum Order Value (₹)</span>
+                        <input
+                          type="number"
+                          name="minOrderValue"
+                          min="0"
+                          step="1"
+                          defaultValue={data.settings.minOrderValue ?? 0}
+                          required
+                        />
+                        <small>Customers cannot checkout below this subtotal (set 0 for no minimum).</small>
+                      </label>
+                      <label>
+                        <span>Minimum Order Quantity (items)</span>
+                        <input
+                          type="number"
+                          name="minOrderQuantity"
+                          min="1"
+                          step="1"
+                          defaultValue={data.settings.minOrderQuantity ?? 1}
+                          required
+                        />
+                        <small>Total count of plants or items required per order.</small>
+                      </label>
+                    </div>
+                  </div>
+
+                  <div className="admin-settings-group">
+                    <div className="admin-settings-group-header">
+                      <Icon name="box" />
+                      <h3>Delivery Charges</h3>
+                    </div>
+                    <p className="admin-settings-group-desc">
+                      Manage standard shipping fee and free delivery threshold applied in the cart and checkout.
+                    </p>
+                    <div className="admin-settings-fields-grid">
+                      <label>
+                        <span>Standard Delivery Charge (₹)</span>
+                        <input
+                          type="number"
+                          name="deliveryCharge"
+                          min="0"
+                          step="1"
+                          defaultValue={data.settings.deliveryCharge ?? 69}
+                          required
+                        />
+                        <small>Standard courier fee added to checkout orders.</small>
+                      </label>
+                      <label>
+                        <span>Free Delivery Threshold (₹)</span>
+                        <input
+                          type="number"
+                          name="freeDeliveryThreshold"
+                          min="0"
+                          step="1"
+                          defaultValue={data.settings.freeDeliveryThreshold ?? 999}
+                          required
+                        />
+                        <small>Orders at or above this value qualify for free delivery (set 0 to disable).</small>
+                      </label>
+                    </div>
+                  </div>
+
+                  <div className="admin-settings-group">
+                    <div className="admin-settings-group-header">
+                      <Icon name="grid" />
+                      <h3>Homepage Sections Visibility</h3>
+                    </div>
+                    <p className="admin-settings-group-desc">
+                      Choose which homepage sections to show or hide on your live website.
+                    </p>
+                    {[
+                      { key: 'hero', label: 'Hero banner', text: 'Your homepage welcome banner' },
+                      { key: 'featured', label: 'Featured plants', text: 'A selection of your Adenium plants' },
+                      { key: 'reviews', label: 'Customer reviews', text: 'Ratings and customer stories' },
+                      { key: 'newsletter', label: 'Newsletter', text: 'The new arrivals signup section' },
+                    ].map(s => (
+                      <label className="admin-toggle-row" key={s.key}>
+                        <span>
+                          <strong>{s.label}</strong>
+                          <small>{s.text}</small>
+                        </span>
+                        <input
+                          type="checkbox"
+                          name={s.key}
+                          defaultChecked={Boolean(data.settings[s.key as keyof Settings])}
+                          role="switch"
+                        />
+                        <span className="admin-toggle-track" aria-hidden="true" />
+                      </label>
+                    ))}
+                  </div>
+                </div>
               )}
 
               {error && <p className="admin-error" role="alert">{error}</p>}
@@ -1052,12 +1700,12 @@ export function AdminPanel({ tab }: { tab: Tab }) {
               <div className="admin-form-actions">
                 <button className="admin-button secondary" type="button" onClick={close}>Cancel</button>
                 <button className="admin-button primary" type="submit">
-                  {modal === 'order'
-                    ? 'Save order'
-                    : modal === 'category'
+                  {modal === 'category'
                     ? editingCategory
                       ? 'Save changes'
                       : 'Add category'
+                    : modal === 'order'
+                    ? 'Save Confirmed Order'
                     : 'Save settings'}
                 </button>
               </div>
@@ -1065,6 +1713,136 @@ export function AdminPanel({ tab }: { tab: Tab }) {
           )}
         </div>
       </dialog>
+
+      {/* Printable Packing Slip Modal */}
+      {printOrder && (
+        <dialog
+          className="admin-dialog packing-slip-dialog"
+          open
+          onClick={e => { if (e.target === e.currentTarget) setPrintOrder(null); }}
+        >
+          <div className="packing-slip-paper" id="printable-order-slip">
+            <div className="slip-header">
+              <div className="slip-brand">
+                <img
+                  src="https://pub-ce8688bc6c654bcfb99716f7c9373bcd.r2.dev/kiaan/brand/kiaan-logo-dark-1793535754883.png"
+                  alt="Kiaan Nursery"
+                  style={{ height: '44px', width: 'auto', objectFit: 'contain' }}
+                />
+                <div>
+                  <strong>Kiaan Nursery &amp; Agro Care</strong>
+                  <p>Habra, North 24 Parganas, West Bengal · Ph: +91 62894 17338</p>
+                </div>
+              </div>
+              <div className="slip-invoice-badge">
+                <span>PACKING SLIP / DISPATCH</span>
+                <h2>#KIAAN-{printOrder.id.slice(0, 8).toUpperCase()}</h2>
+                <small>{new Date(printOrder.date).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}</small>
+              </div>
+            </div>
+
+            <div className="slip-divider" />
+
+            <div className="slip-meta-grid">
+              <div className="slip-meta-box">
+                <span className="meta-label">DELIVER TO:</span>
+                <strong>{parseCustomer(printOrder.customer).name}</strong>
+                <p>{parseOrderDetails(printOrder.details).address || 'Address on record'}</p>
+                <p><strong>Mobile:</strong> +91 {parseCustomer(printOrder.customer).phone || parseCustomer(printOrder.customer).rawPhone || 'N/A'}</p>
+                {parseCustomer(printOrder.customer).email && <p><strong>Email:</strong> {parseCustomer(printOrder.customer).email}</p>}
+              </div>
+
+              <div className="slip-meta-box right">
+                <span className="meta-label">PAYMENT &amp; DISPATCH:</span>
+                <p><strong>Payment Method:</strong> 100% Online Paid (Razorpay)</p>
+                {printOrder.paymentId && <p><strong>Payment ID:</strong> {printOrder.paymentId}</p>}
+                <p><strong>Current Status:</strong> {printOrder.status}</p>
+                <p><strong>Packaging:</strong> Breathable Botanical Cushioning</p>
+              </div>
+            </div>
+
+            {parseOrderDetails(printOrder.details).notes && (
+              <div className="slip-notes-banner">
+                <strong>Delivery Instructions:</strong> {parseOrderDetails(printOrder.details).notes}
+              </div>
+            )}
+
+            <div className="slip-items-section">
+              <table className="slip-table">
+                <thead>
+                  <tr>
+                    <th>Item Description</th>
+                    <th style={{ textAlign: 'center' }}>Qty</th>
+                    <th style={{ textAlign: 'right' }}>Status</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {parseOrderDetails(printOrder.details).rawItems.map((it, i) => (
+                    <tr key={i}>
+                      <td><strong>{it}</strong></td>
+                      <td style={{ textAlign: 'center' }}>1</td>
+                      <td style={{ textAlign: 'right', color: '#1b5e20' }}>✓ Verified</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            <div className="slip-total-bar">
+              <span>Total Paid via Razorpay:</span>
+              <strong>{money(printOrder.total)}</strong>
+            </div>
+
+            <div className="slip-footer-note">
+              <p>🌱 Thank you for choosing Kiaan Nursery &amp; Agro Care. Hand-nursed with organic care in Habra.</p>
+              <p>For repotting and watering guidance, connect on WhatsApp: <strong>+91 62894 17338</strong></p>
+            </div>
+
+            <div className="slip-actions-no-print">
+              <button
+                type="button"
+                className="admin-button secondary"
+                onClick={() => setPrintOrder(null)}
+              >
+                Close
+              </button>
+              <button
+                type="button"
+                className="admin-button primary"
+                onClick={() => window.print()}
+              >
+                🖨️ Print Packing Slip
+              </button>
+            </div>
+          </div>
+        </dialog>
+      )}
+
+      {/* Delete Order Confirmation Dialog */}
+      {orderToDelete && (
+        <dialog
+          className="admin-dialog"
+          open
+          onClick={e => { if (e.target === e.currentTarget) setOrderToDelete(null); }}
+        >
+          <div className="admin-dialog-inner">
+            <div className="admin-dialog-heading">
+              <h2>Delete Order Record?</h2>
+              <button className="admin-icon-button" onClick={() => setOrderToDelete(null)}>
+                <Icon name="close" />
+              </button>
+            </div>
+            <p>
+              Are you sure you want to delete order <strong>#KIAAN-{orderToDelete.id.slice(0, 8).toUpperCase()}</strong> for {parseCustomer(orderToDelete.customer).name}?
+              This order record will be permanently deleted from the database.
+            </p>
+            <div className="admin-form-actions">
+              <button className="admin-button secondary" onClick={() => setOrderToDelete(null)}>Cancel</button>
+              <button className="admin-button danger" onClick={() => deleteConfirmedOrder(orderToDelete)}>Delete Order</button>
+            </div>
+          </div>
+        </dialog>
+      )}
 
       <div className={`admin-toast ${message ? 'show' : ''}`} role="status">
         {message && <><Icon name="check" />{message}</>}

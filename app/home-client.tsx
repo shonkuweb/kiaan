@@ -22,13 +22,14 @@ const agroCareBenefits: { icon: IconName; title: React.ReactNode }[] = [
 export function HomeClient({
   initialProducts = [],
   initialCategories = [],
+  initialHero = null,
 }: {
   initialProducts?: Product[];
   initialCategories?: Category[];
+  initialHero?: HeroBanner | null;
 }) {
   const { setPanel, setInfo, products: storeProducts } = useStore();
-  const [slide, setSlide] = useState(0);
-  const [hero, setHero] = useState<HeroBanner | null>(null);
+  const [hero, setHero] = useState<HeroBanner | null>(initialHero);
 
   const [categories, setCategories] = useState<Category[]>(initialCategories);
   const [activeCategoryId, setActiveCategoryId] = useState<string>(
@@ -92,49 +93,34 @@ export function HomeClient({
 
   return (
     <main>
-      <section className={`hero hero-slide-${slide}`} aria-label="Adenium collection">
-        <div
-          className="hero-art"
-          style={slide === 0 && hero ? { backgroundImage: `url("${hero.imageUrl}")` } : undefined}
-        />
+      <section className="hero" aria-label="Adenium collection">
+        <div className="hero-art" aria-hidden="true">
+          <img
+            src={hero?.imageUrl || '/images/hero-flower.webp'}
+            alt=""
+            className="hero-img"
+            fetchPriority="high"
+          />
+        </div>
         <div className="hero-content">
           <p className="eyebrow">— &nbsp;Adenium Specialists&nbsp; —</p>
           <h1>
-            {slide === 0 && hero ? (
+            {hero ? (
               hero.title
-            ) : slide === 0 ? (
-              <>Beautiful Adenium<br />Plants for Your Garden</>
-            ) : slide === 1 ? (
-              <>Rare Varieties,<br />Extraordinary Blooms</>
             ) : (
-              <>A Little Green.<br />A Lot of Happiness.</>
+              <>Beautiful Adenium<br />Plants for Your Garden</>
             )}
           </h1>
           <p className="hero-description">
-            {slide === 0 && hero ? (
+            {hero ? (
               hero.subtitle
-            ) : slide === 0 ? (
-              <>Rare varieties, healthy plants<br />and complete care support.</>
-            ) : slide === 1 ? (
-              <>Find your favorite colors<br />in our Adenium collection.</>
             ) : (
-              <>Carefully grown plants,<br />delivered with care.</>
+              <>Rare varieties, healthy plants<br />and complete care support.</>
             )}
           </p>
           <a className="pill light" href="/collections/adenium">
             Shop Adenium <Icon name="arrow" />
           </a>
-        </div>
-        <div className="slide-dots" aria-label="Hero slides">
-          {[0, 1, 2].map(n => (
-            <button
-              key={n}
-              onClick={() => setSlide(n)}
-              className={slide === n ? 'active' : ''}
-              aria-label={`Show slide ${n + 1}`}
-              aria-pressed={slide === n}
-            />
-          ))}
         </div>
       </section>
 

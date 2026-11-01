@@ -1,5 +1,5 @@
 import { NextRequest } from 'next/server';
-import { getOrders, createOrder, updateOrderStatus } from '../../../lib/server/db';
+import { getOrders, createOrder, updateOrderStatus, deleteOrder } from '../../../lib/server/db';
 import { checkLocalAdmin } from '../../../lib/server/r2';
 
 export const runtime = 'nodejs';
@@ -28,7 +28,7 @@ export async function POST(request: NextRequest) {
     const customer = String(body.customer || '').trim();
     const details = String(body.details || '').trim();
     const total = Number(body.total);
-    const status = String(body.status || 'Pending').trim();
+    const status = String(body.status || 'Confirmed').trim();
 
     if (!customer) {
       return Response.json({ error: 'Customer name is required.' }, { status: 400 });
@@ -40,7 +40,14 @@ export async function POST(request: NextRequest) {
       return Response.json({ error: 'Enter a valid total amount.' }, { status: 400 });
     }
 
-    const created = createOrder({ customer, details, total, status });
+    const created = createOrder({
+      customer,
+      details,
+      total,
+      status,
+      paymentStatus: 'paid',
+      paymentMethod: 'manual',
+    });
     return Response.json(created, { status: 201 });
   } catch (error) {
     return Response.json(
@@ -72,6 +79,31 @@ export async function PUT(request: NextRequest) {
   } catch (error) {
     return Response.json(
       { error: error instanceof Error ? error.message : 'Could not update order' },
+      { status: 500 }
+    );
+  }
+}
+
+export async function DELETE(request: NextRequest) {
+  const denied = checkLocalAdmin(request);
+  if (denied) return denied;
+
+  try {
+    const { searchParams } = new URL(request.url);
+    const id = searchParams.get('id');
+    if (!id) {
+      return Response.json({ error: 'Order ID is required.' }, { status: 400 });
+    }
+
+    const deleted = deleteOrder(id);
+    if (!deleted) {
+      return Response.json({ error: 'Order not found.' }, { status: 404 });
+    }
+
+    return Response.json({ success: true, id });
+  } catch (error) {
+    return Response.json(
+      { error: error instanceof Error ? error.message : 'Could not delete order' },
       { status: 500 }
     );
   }

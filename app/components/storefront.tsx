@@ -265,6 +265,9 @@ export function Storefront({ children }: { children: React.ReactNode }) {
   }, [panel, info]);
 
   const count = Object.values(cart).reduce((sum, n) => sum + n, 0);
+  const subtotal = catalog
+    .filter(p => cart[p.id])
+    .reduce((sum, p) => sum + p.price * cart[p.id], 0);
 
   function add(product: Product, amount = 1) {
     setCart(c => ({ ...c, [product.id]: Math.min(99, (c[product.id] || 0) + amount) }));
@@ -380,6 +383,38 @@ export function Storefront({ children }: { children: React.ReactNode }) {
           <path fill="#204e16" d="M0 110C300 40 360-10 700 70s480 25 740-15v65H0Z" />
         </svg>
       </footer>
+
+      {hydrated && count > 0 && panel !== 'cart' && pathname !== '/checkout' && (
+        <button
+          type="button"
+          className="floating-cart-btn"
+          onClick={() => setPanel('cart')}
+          aria-label={`Your Cart: ${count} ${count === 1 ? 'item' : 'items'}, total ${money(subtotal)}`}
+        >
+          <span className="floating-cart-icon-wrap" aria-hidden="true">
+            <svg
+              className="floating-cart-svg"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2.2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            >
+              <circle cx="8" cy="21" r="1.5" />
+              <circle cx="19" cy="21" r="1.5" />
+              <path d="M2.5 3h3l3.2 13.2a1.5 1.5 0 0 0 1.5 1.2h9.5a1.5 1.5 0 0 0 1.5-1.2l2-8.2H6.5" />
+            </svg>
+            <span className="floating-cart-count">{count}</span>
+          </span>
+          <span className="floating-cart-label">Your Cart</span>
+          <span className="floating-cart-dot" aria-hidden="true">•</span>
+          <span className="floating-cart-total">{money(subtotal)}</span>
+          <span className="floating-cart-arrow" aria-hidden="true">
+            <Icon name="arrow" />
+          </span>
+        </button>
+      )}
 
       {(panel || info) && (
         <div className="modal-backdrop" onClick={() => { setPanel(null); setInfo(null); }}>

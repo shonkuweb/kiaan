@@ -702,9 +702,16 @@ export function deleteCategory(id: string): boolean {
   return result.changes > 0;
 }
 
-export function getOrders(): Order[] {
+export function getOrders(options?: { onlyConfirmed?: boolean }): Order[] {
   const db = getDatabase();
-  const rows = db.prepare('SELECT * FROM orders ORDER BY created_at DESC').all() as unknown as DbOrderRow[];
+  const onlyConfirmed = options?.onlyConfirmed !== false;
+  const query = onlyConfirmed
+    ? `SELECT * FROM orders 
+       WHERE status NOT IN ('Pending Payment', 'Pending') 
+         AND (payment_status = 'paid' OR status IN ('Confirmed', 'Packed', 'Shipped', 'Delivered', 'Cancelled'))
+       ORDER BY created_at DESC`
+    : `SELECT * FROM orders ORDER BY created_at DESC`;
+  const rows = db.prepare(query).all() as unknown as DbOrderRow[];
   return rows.map(r => ({
     id: r.id,
     customer: r.customer,
@@ -714,7 +721,7 @@ export function getOrders(): Order[] {
     razorpayOrderId: r.razorpay_order_id || '',
     paymentId: r.payment_id || '',
     paymentStatus: r.payment_status || 'pending',
-    paymentMethod: r.payment_method || 'cod',
+    paymentMethod: r.payment_method || 'razorpay',
     date: r.created_at,
   }));
 }
@@ -837,6 +844,12 @@ export function updateOrderStatus(id: string, status: string): Order | null {
   const result = db.prepare('UPDATE orders SET status = ? WHERE id = ?').run(status, id);
   if (result.changes === 0) return null;
   return getOrderById(id);
+}
+
+export function deleteOrder(id: string): boolean {
+  const db = getDatabase();
+  const result = db.prepare('DELETE FROM orders WHERE id = ?').run(id);
+  return result.changes > 0;
 }
 
 export function getStoreSettings(): StoreSettings {
