@@ -60,6 +60,15 @@ export function CheckoutClient() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [orderResult, setOrderResult] = useState<OrderSuccessData | null>(null);
+  const [copiedId, setCopiedId] = useState(false);
+
+  function copyToClipboard(text: string) {
+    if (typeof navigator !== 'undefined' && navigator.clipboard) {
+      navigator.clipboard.writeText(text);
+      setCopiedId(true);
+      setTimeout(() => setCopiedId(false), 2200);
+    }
+  }
 
   // Cart items & subtotal
   const items = products.filter(p => cart[p.id]);
@@ -262,88 +271,99 @@ export function CheckoutClient() {
 
   // --- ORDER SUCCESS VIEW ---
   if (orderResult) {
-    const shortId = orderResult.orderId.slice(0, 8).toUpperCase();
-    const whatsappText = `Hello Kiaan Nursery & Agro Care!\nI have placed an order on your site.\n\n*Order ID:* #KIAAN-${shortId}\n*Customer:* ${orderResult.customer.name}\n*Phone:* ${orderResult.customer.phone}\n*Payment Method:* ${orderResult.paymentMethod}${orderResult.paymentId ? `\n*Payment ID:* ${orderResult.paymentId}` : ''}\n*Items:*\n${orderResult.items.map(i => `• ${i.name} × ${i.quantity} (₹${i.price * i.quantity})`).join('\n')}\n*Total:* ₹${orderResult.total}\n*Delivery Address:* ${orderResult.customer.address}\n\nPlease confirm availability and dispatch details. Thank you!`;
+    const displayOrderId = orderResult.orderId.startsWith('KN-')
+      ? orderResult.orderId
+      : `#KIAAN-${orderResult.orderId.slice(0, 8).toUpperCase()}`;
+
+    const whatsappText = `Hello Kiaan Nursery!\nI have placed an order.\n\n*Order ID:* ${displayOrderId}\n*Customer:* ${orderResult.customer.name}\n*Total Paid:* ₹${orderResult.total}\n*Delivery Address:* ${orderResult.customer.address}\n\nPlease share dispatch details. Thank you!`;
 
     return (
       <main className="checkout-success-page">
         <div className="checkout-container">
-          <div className="success-card">
+          <div className="success-card simplified-success-card">
             <div className="success-icon-wrap" aria-hidden="true">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" className="success-svg">
                 <path d="M20 6L9 17l-5-5" strokeLinecap="round" strokeLinejoin="round" />
               </svg>
             </div>
 
-            <span className="success-tag">PAYMENT VERIFIED &bull; ORDER CONFIRMED</span>
+            <span className="success-tag">ORDER CONFIRMED</span>
             <h1 className="success-title">Thank You, {orderResult.customer.name}!</h1>
             <p className="success-subtitle">
-              Your payment was successfully received and verified via Razorpay. Your healthy plants and care essentials are being prepped for dispatch at our Habra nursery.
+              Your payment has been received and verified. Your living plants and agro care essentials are being prepped for dispatch at our Howrah nursery.
             </p>
 
-            <div className="order-id-badge">
-              <span>Order Reference</span>
-              <strong>#KIAAN-{shortId}</strong>
+            {/* Super simple & copy-passable Order ID */}
+            <div className="order-id-copy-box">
+              <span className="order-id-copy-label">YOUR ORDER ID</span>
+              <div className="order-id-copy-row">
+                <strong className="order-id-code">{displayOrderId}</strong>
+                <button
+                  type="button"
+                  className={`copy-order-btn ${copiedId ? 'is-copied' : ''}`}
+                  onClick={() => copyToClipboard(displayOrderId)}
+                  title="Copy Order ID"
+                  aria-label="Copy Order ID"
+                >
+                  {copiedId ? (
+                    <>
+                      <Icon name="check" />
+                      <span>Copied!</span>
+                    </>
+                  ) : (
+                    <>
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="15" height="15">
+                        <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
+                        <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+                      </svg>
+                      <span>Copy</span>
+                    </>
+                  )}
+                </button>
+              </div>
+              <small className="order-id-copy-hint">Tap Copy to save your Order ID for tracking your package.</small>
             </div>
 
+            {/* Simplified Order Summary */}
             <div className="success-summary-box">
               <div className="summary-row">
-                <span>Payment Method</span>
-                <strong>{orderResult.paymentMethod}</strong>
-              </div>
-              {orderResult.paymentId && (
-                <div className="summary-row">
-                  <span>Razorpay Payment ID</span>
-                  <span style={{ fontFamily: 'monospace', color: '#135818', fontWeight: 600 }}>
-                    {orderResult.paymentId}
-                  </span>
-                </div>
-              )}
-              <div className="summary-row">
-                <span>Payment Status</span>
-                <span className="status-badge paid" style={{ background: '#d6edd4', color: '#135818', padding: '3px 9px', borderRadius: '6px', fontWeight: 700 }}>
-                  ✓ Paid &amp; Confirmed
-                </span>
-              </div>
-              <div className="summary-row">
-                <span>Delivery To</span>
-                <span className="summary-address">{orderResult.customer.address}</span>
-              </div>
-              <div className="summary-row">
-                <span>Total Amount Paid</span>
+                <span>Amount Paid</span>
                 <strong className="summary-price">{money(orderResult.total)}</strong>
               </div>
+              <div className="summary-row">
+                <span>Delivering To</span>
+                <span className="summary-address">{orderResult.customer.address}</span>
+              </div>
             </div>
 
-            <div className="success-items-list">
-              <h3>Items in this order ({orderResult.items.reduce((s, i) => s + i.quantity, 0)})</h3>
-              {orderResult.items.map(item => (
-                <div key={item.id} className="success-item-row">
-                  <span>{item.name} <strong>&times; {item.quantity}</strong></span>
-                  <span>{money(item.price * item.quantity)}</span>
-                </div>
-              ))}
-            </div>
-
-            {/* Direct WhatsApp Confirmation Button */}
+            {/* Quick Actions */}
             <div className="success-actions">
+              <Link
+                href={`/track?orderId=${encodeURIComponent(displayOrderId)}&phone=${encodeURIComponent(orderResult.customer.phone)}`}
+                className="pill dark track-now-btn"
+              >
+                <Icon name="truck" />
+                <span>Track Your Order</span>
+              </Link>
+
               <a
-                href={`https://wa.me/916289417338?text=${encodeURIComponent(whatsappText)}`}
+                href={`https://wa.me/919038823613?text=${encodeURIComponent(whatsappText)}`}
                 target="_blank"
                 rel="noreferrer"
                 className="pill whatsapp-btn"
               >
                 <Icon name="phone" />
-                Connect on WhatsApp for Live Plant Photos
+                <span>WhatsApp Live Updates</span>
               </a>
 
               <Link href="/" className="pill light continue-btn">
-                Back to Home <Icon name="arrow" />
+                <span>Back to Home</span>
+                <Icon name="arrow" />
               </Link>
             </div>
 
             <p className="success-note">
-              🌱 We hand-pick and carefully inspect each Adenium caudex and foliage before dispatching. Our nursery experts will contact you on <strong>+91 {orderResult.customer.phone}</strong> if needed.
+              🌱 Our Howrah nursery experts hand-inspect every plant before packing. For any queries, reach us on <strong>+91 90388 23613</strong>.
             </p>
           </div>
         </div>
@@ -507,7 +527,7 @@ export function CheckoutClient() {
                   <input
                     id="checkout-landmark"
                     type="text"
-                    placeholder="e.g. Near Habra Railway Station / Beside Kali Mandir"
+                    placeholder="e.g. Near Howrah Railway Station / Beside Ghosh Para"
                     value={form.landmark}
                     onChange={e => setForm({ ...form, landmark: e.target.value })}
                   />
@@ -519,7 +539,7 @@ export function CheckoutClient() {
                     id="checkout-city"
                     type="text"
                     required
-                    placeholder="e.g. Kolkata / Habra"
+                    placeholder="e.g. Howrah / Kolkata"
                     value={form.city}
                     onChange={e => setForm({ ...form, city: e.target.value })}
                   />
@@ -563,43 +583,6 @@ export function CheckoutClient() {
               </div>
             </section>
 
-            {/* Step 3: Payment Method (Razorpay Online Only) */}
-            <section className="form-card">
-              <div className="form-card-header">
-                <span className="step-number">3</span>
-                <h2>Payment Method</h2>
-              </div>
-              <div className="razorpay-only-card">
-                <div className="razorpay-card-header">
-                  <div className="razorpay-brand-row">
-                    <span className="razorpay-logo-badge">
-                      <Icon name="shield" />
-                      <span>Razorpay Secure Online Payment</span>
-                    </span>
-                    <span className="payment-badge green">Instant &bull; 100% Online</span>
-                  </div>
-                  <strong>UPI, Debit / Credit Cards &amp; NetBanking</strong>
-                </div>
-
-                <p className="razorpay-card-desc">
-                  Pay securely using Google Pay, PhonePe, Paytm, BHIM UPI, Debit/Credit Cards (Visa, Mastercard, RuPay), or NetBanking. Instant automated confirmation.
-                </p>
-
-                <div className="payment-methods-pills">
-                  <span className="pay-method-pill">⚡ UPI / QR</span>
-                  <span className="pay-method-pill">Google Pay</span>
-                  <span className="pay-method-pill">PhonePe</span>
-                  <span className="pay-method-pill">Paytm</span>
-                  <span className="pay-method-pill">Visa / Mastercard / RuPay</span>
-                  <span className="pay-method-pill">NetBanking</span>
-                </div>
-
-                <div className="cod-disabled-notice">
-                  <span>ℹ️ Cash on Delivery (COD) is not available. To guarantee living plant freshness and expedited dispatch from Habra nursery, all orders are paid online securely.</span>
-                </div>
-              </div>
-            </section>
-
             {/* Place Order CTA */}
             <div className="checkout-submit-wrap">
               <button
@@ -622,7 +605,7 @@ export function CheckoutClient() {
 
               <div className="checkout-security-guarantee">
                 <Icon name="shield" />
-                <span>100% Secure 128-bit Encrypted Razorpay Gateway &bull; Safe Botanical Packaging from Habra</span>
+                <span>100% Secure 128-bit Encrypted Razorpay Gateway &bull; Safe Botanical Packaging from Howrah</span>
               </div>
             </div>
           </form>

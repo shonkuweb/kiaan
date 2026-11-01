@@ -1,6 +1,6 @@
 'use client';
 import Link from 'next/link';
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 import { money, getProductImageUrl, type Product } from '../lib/products';
 import { Icon, ProductCard, useStore, type IconName } from './storefront';
 
@@ -132,6 +132,11 @@ export function ProductDetails({
   const { wishlist, favorite, add, setPanel, products: storeProducts } = useStore();
   const [amount, setAmount] = useState(1);
   const [activeImage, setActiveImage] = useState(0);
+  const galleryTrackRef = useRef<HTMLDivElement>(null);
+  const isDraggingRef = useRef(false);
+  const startXRef = useRef(0);
+  const scrollLeftRef = useRef(0);
+  const hasMovedRef = useRef(false);
 
   const gallery =
     product.images && product.images.length > 0
@@ -140,6 +145,61 @@ export function ProductDetails({
           label: `${product.name} photo ${i + 1}`,
         }))
       : [{ image: getProductImageUrl(product), label: product.name }];
+
+  const scrollToIndex = (index: number) => {
+    const el = galleryTrackRef.current;
+    if (!el) return;
+    const clamped = Math.max(0, Math.min(index, gallery.length - 1));
+    el.scrollTo({
+      left: clamped * el.clientWidth,
+      behavior: 'smooth',
+    });
+    setActiveImage(clamped);
+  };
+
+  const handleTrackScroll = () => {
+    const el = galleryTrackRef.current;
+    if (!el || el.clientWidth === 0) return;
+    const index = Math.round(el.scrollLeft / el.clientWidth);
+    if (index !== activeImage && index >= 0 && index < gallery.length) {
+      setActiveImage(index);
+    }
+  };
+
+  const handleMouseDown = (e: React.MouseEvent<HTMLDivElement>) => {
+    if (e.button !== 0 || gallery.length <= 1) return;
+    const el = galleryTrackRef.current;
+    if (!el) return;
+    isDraggingRef.current = true;
+    hasMovedRef.current = false;
+    startXRef.current = e.pageX - el.offsetLeft;
+    scrollLeftRef.current = el.scrollLeft;
+  };
+
+  const handleMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
+    if (!isDraggingRef.current) return;
+    const el = galleryTrackRef.current;
+    if (!el) return;
+    const x = e.pageX - el.offsetLeft;
+    const walk = x - startXRef.current;
+    if (Math.abs(walk) > 4) {
+      hasMovedRef.current = true;
+      el.scrollLeft = scrollLeftRef.current - walk;
+    }
+  };
+
+  const handleMouseUp = () => {
+    if (!isDraggingRef.current) return;
+    isDraggingRef.current = false;
+    const el = galleryTrackRef.current;
+    if (el) {
+      const index = Math.round(el.scrollLeft / el.clientWidth);
+      scrollToIndex(index);
+    }
+    setTimeout(() => {
+      hasMovedRef.current = false;
+    }, 50);
+  };
 
   const related =
     relatedProducts.length > 0
@@ -172,24 +232,44 @@ export function ProductDetails({
     value: product.stock > 0 ? (product.stock <= 5 ? `Only ${product.stock} left` : 'In Stock') : 'Out of Stock',
   });
 
-  const activePhoto = gallery[activeImage] || gallery[0];
-  const activePhotoSrc =
-    activePhoto.image.startsWith('http') || activePhoto.image.startsWith('/')
-      ? activePhoto.image
-      : `/images/${activePhoto.image}.webp`;
-
   return (
     <main className="shop-page detail-page">
       <Breadcrumb product={product} />
       <section className="product-gallery" aria-label={`${product.name} photos`}>
         <div className="detail-main-photo">
-          <img
-            src={activePhotoSrc}
-            alt={activePhoto.label}
-            width="780"
-            height="780"
-            fetchPriority="high"
-          />
+          <div
+            className="detail-gallery-track"
+            ref={galleryTrackRef}
+            onScroll={handleTrackScroll}
+            onMouseDown={handleMouseDown}
+            onMouseMove={handleMouseMove}
+            onMouseUp={handleMouseUp}
+            onMouseLeave={handleMouseUp}
+            tabIndex={0}
+            role="region"
+            aria-label={`${product.name} photos, swipeable carousel`}
+          >
+            {gallery.map((photo, index) => {
+              const photoSrc =
+                photo.image.startsWith('http') || photo.image.startsWith('/')
+                  ? photo.image
+                  : `/images/${photo.image}.webp`;
+              return (
+                <div className="detail-slide" key={photo.image + index}>
+                  <img
+                    src={photoSrc}
+                    alt={photo.label}
+                    width="780"
+                    height="780"
+                    fetchPriority={index === 0 ? 'high' : 'auto'}
+                    loading={index === 0 ? 'eager' : 'lazy'}
+                    draggable={false}
+                  />
+                </div>
+              );
+            })}
+          </div>
+
           <button
             className={`favorite ${wishlist.includes(product.id) ? 'selected' : ''}`}
             aria-label={`${wishlist.includes(product.id) ? 'Remove' : 'Save'} ${product.name} ${wishlist.includes(product.id) ? 'from' : 'to'} wishlist`}
@@ -198,9 +278,41 @@ export function ProductDetails({
           >
             <Icon name="heart" />
           </button>
+
+          {gallery.length > 1 && (
+            <>
+              <button
+                type="button"
+                className="gallery-nav-arrow prev"
+                onClick={() => scrollToIndex(activeImage - 1)}
+                disabled={activeImage === 0}
+                aria-label="Previous photo"
+              >
+                <Icon name="arrow" />
+              </button>
+              <button
+                type="button"
+                className="gallery-nav-arrow next"
+                onClick={() => scrollToIndex(activeImage + 1)}
+                disabled={activeImage === gallery.length - 1}
+                aria-label="Next photo"
+              >
+                <Icon name="arrow" />
+              </button>
+              <div className="gallery-slide-indicator" aria-hidden="true">
+                {gallery.map((_, i) => (
+                  <span
+                    key={i}
+                    className={`indicator-dot ${activeImage === i ? 'active' : ''}`}
+                    onClick={() => scrollToIndex(i)}
+                  />
+                ))}
+              </div>
+            </>
+          )}
         </div>
         {gallery.length > 1 && (
-          <div className="gallery-thumbnails">
+          <div className="gallery-thumbnails" role="tablist" aria-label="Photo thumbnails">
             {gallery.map((photo, index) => {
               const photoSrc =
                 photo.image.startsWith('http') || photo.image.startsWith('/')
@@ -208,11 +320,13 @@ export function ProductDetails({
                   : `/images/${photo.image}.webp`;
               return (
                 <button
+                  type="button"
+                  role="tab"
                   className={activeImage === index ? 'active' : ''}
-                  onClick={() => setActiveImage(index)}
+                  onClick={() => scrollToIndex(index)}
                   key={photo.image + index}
                   aria-label={`View ${photo.label.toLowerCase()}`}
-                  aria-pressed={activeImage === index}
+                  aria-selected={activeImage === index}
                 >
                   <img src={photoSrc} alt="" width="180" height="180" />
                 </button>
@@ -258,11 +372,6 @@ export function ProductDetails({
             <Icon name="cart" />{product.stock > 0 ? 'Add to Cart' : 'Out of Stock'}
           </button>
         </div>
-        <button className="plant-care-link" onClick={() => setPanel('guide')}>
-          <img src="https://pub-ce8688bc6c654bcfb99716f7c9373bcd.r2.dev/kiaan/brand/kiaan-logo-1793535536482.png" alt="Kiaan Nursery" width="48" height="48" style={{ objectFit: 'contain' }} />
-          <span><strong>Plant Care</strong><small>Sunlight, watering, soil and more</small></span>
-          <Icon name="arrow" />
-        </button>
         <div className="product-accordions">
           {[
             {

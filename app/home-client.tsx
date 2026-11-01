@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { type HeroBanner } from './lib/hero';
 import { Icon, ProductCard, NewsletterForm, useStore, type IconName } from './components/storefront';
 import { type Product, type Category } from './lib/products';
@@ -91,6 +91,130 @@ export function HomeClient({
   // General catalog list: all products in this category
   const catalogList = storeCategoryProducts;
 
+  const featuredScrollRef = useRef<HTMLDivElement>(null);
+  const [canScrollLeft, setCanScrollLeft] = useState(false);
+  const [canScrollRight, setCanScrollRight] = useState(false);
+  const [isDragging, setIsDragging] = useState(false);
+
+  const isPointerDownRef = useRef(false);
+  const startXRef = useRef(0);
+  const startScrollLeftRef = useRef(0);
+  const hasMovedRef = useRef(false);
+
+  const checkFeaturedScroll = () => {
+    const el = featuredScrollRef.current;
+    if (!el) return;
+    setCanScrollLeft(el.scrollLeft > 4);
+    setCanScrollRight(el.scrollLeft < el.scrollWidth - el.clientWidth - 4);
+  };
+
+  useEffect(() => {
+    const timer = setTimeout(checkFeaturedScroll, 60);
+    const el = featuredScrollRef.current;
+    if (el) {
+      el.addEventListener('scroll', checkFeaturedScroll, { passive: true });
+      window.addEventListener('resize', checkFeaturedScroll);
+      return () => {
+        clearTimeout(timer);
+        el.removeEventListener('scroll', checkFeaturedScroll);
+        window.removeEventListener('resize', checkFeaturedScroll);
+      };
+    }
+    return () => clearTimeout(timer);
+  }, [featuredList, activeCategoryId]);
+
+  useEffect(() => {
+    if (featuredScrollRef.current) {
+      featuredScrollRef.current.scrollLeft = 0;
+    }
+  }, [activeCategoryId]);
+
+  const scrollFeatured = (direction: 'left' | 'right') => {
+    const el = featuredScrollRef.current;
+    if (!el) return;
+    const card = el.querySelector<HTMLElement>('.product-card');
+    const scrollAmount = card ? card.offsetWidth + 16 : Math.round(el.clientWidth * 0.75);
+    el.scrollBy({
+      left: direction === 'left' ? -scrollAmount : scrollAmount,
+      behavior: 'smooth',
+    });
+  };
+
+  const handleMouseDown = (e: React.MouseEvent<HTMLDivElement>) => {
+    if (e.button !== 0) return;
+    const el = featuredScrollRef.current;
+    if (!el || el.scrollWidth <= el.clientWidth) return;
+    isPointerDownRef.current = true;
+    hasMovedRef.current = false;
+    startXRef.current = e.pageX - el.offsetLeft;
+    startScrollLeftRef.current = el.scrollLeft;
+  };
+
+  const handleMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
+    if (!isPointerDownRef.current) return;
+    const el = featuredScrollRef.current;
+    if (!el) return;
+    const x = e.pageX - el.offsetLeft;
+    const walk = x - startXRef.current;
+    if (Math.abs(walk) > 5) {
+      if (!isDragging) setIsDragging(true);
+      hasMovedRef.current = true;
+      el.scrollLeft = startScrollLeftRef.current - walk;
+    }
+  };
+
+  const handleMouseUp = () => {
+    isPointerDownRef.current = false;
+    setIsDragging(false);
+    setTimeout(() => {
+      hasMovedRef.current = false;
+    }, 50);
+  };
+
+  const handleClickCapture = (e: React.MouseEvent) => {
+    if (hasMovedRef.current) {
+      e.preventDefault();
+      e.stopPropagation();
+    }
+  };
+
+  const categoriesScrollRef = useRef<HTMLDivElement>(null);
+  const [canScrollCategoriesLeft, setCanScrollCategoriesLeft] = useState(false);
+  const [canScrollCategoriesRight, setCanScrollCategoriesRight] = useState(false);
+
+  const checkCategoriesScroll = () => {
+    const el = categoriesScrollRef.current;
+    if (!el) return;
+    setCanScrollCategoriesLeft(el.scrollLeft > 4);
+    setCanScrollCategoriesRight(el.scrollLeft < el.scrollWidth - el.clientWidth - 4);
+  };
+
+  useEffect(() => {
+    const timer = setTimeout(checkCategoriesScroll, 60);
+    const el = categoriesScrollRef.current;
+    if (el) {
+      el.addEventListener('scroll', checkCategoriesScroll, { passive: true });
+      window.addEventListener('resize', checkCategoriesScroll);
+      return () => {
+        clearTimeout(timer);
+        el.removeEventListener('scroll', checkCategoriesScroll);
+        window.removeEventListener('resize', checkCategoriesScroll);
+      };
+    }
+    return () => clearTimeout(timer);
+  }, [categories]);
+
+  const scrollCategories = (direction: 'left' | 'right') => {
+    const el = categoriesScrollRef.current;
+    if (!el) return;
+    const btn = el.querySelector<HTMLElement>('.category-circle-btn');
+    const scrollAmount = btn ? btn.offsetWidth + 24 : Math.round(el.clientWidth * 0.75);
+    el.scrollBy({
+      left: direction === 'left' ? -scrollAmount : scrollAmount,
+      behavior: 'smooth',
+    });
+  };
+
   return (
     <main>
       <section className="hero" aria-label="Adenium collection">
@@ -139,9 +263,40 @@ export function HomeClient({
           <section className="store-categories-section" aria-label="Store Categories">
             <div className="store-categories-header">
               <p className="categories-eyebrow">— &nbsp;Shop by Category&nbsp; —</p>
+              {categories.length > 3 && (
+                <div className="category-scroll-controls" aria-label="Category navigation">
+                  <button
+                    type="button"
+                    className="category-nav-btn prev"
+                    onClick={() => scrollCategories('left')}
+                    disabled={!canScrollCategoriesLeft}
+                    aria-label="Previous categories"
+                  >
+                    <Icon name="arrow" />
+                  </button>
+                  <button
+                    type="button"
+                    className="category-nav-btn next"
+                    onClick={() => scrollCategories('right')}
+                    disabled={!canScrollCategoriesRight}
+                    aria-label="Next categories"
+                  >
+                    <Icon name="arrow" />
+                  </button>
+                </div>
+              )}
             </div>
-            <div className="category-circles-scroll-wrap">
-              <div className="category-circles-row" role="tablist" aria-label="Categories">
+            <div
+              ref={categoriesScrollRef}
+              className={`category-circles-scroll-wrap ${categories.length > 3 ? 'is-scrollable' : ''}`}
+              tabIndex={0}
+              aria-label="Shop by category list"
+            >
+              <div
+                className={`category-circles-row ${categories.length > 3 ? 'has-overflow' : ''}`}
+                role="tablist"
+                aria-label="Categories"
+              >
                 {categories.map(cat => {
                   const isActive = activeCategoryId === cat.id;
                   const thumbImage = cat.image || (cat.id === 'agrocare' ? '/images/essentials.webp' : '/images/collection.webp');
@@ -182,24 +337,65 @@ export function HomeClient({
 
       {/* Featured Section (Switches dynamically based on isFeatured in database) */}
       <section className="featured" aria-labelledby="featured-title">
-        <div className="section-heading">
+        <div className="section-heading featured-heading">
           <div>
             <h2 id="featured-title">
               Featured {activeCategory?.name || 'Products'}
             </h2>
           </div>
-          {isAdenium ? (
-            <a href="/collections/adenium" className="view-link">View All <Icon name="arrow" /></a>
-          ) : (
-            <span className="store-badge-pill">{featuredList.length} Featured</span>
-          )}
+          <div className="featured-heading-actions">
+            {isAdenium ? (
+              <a href="/collections/adenium" className="view-link">View All <Icon name="arrow" /></a>
+            ) : (
+              <span className="store-badge-pill">{featuredList.length} Featured</span>
+            )}
+            {featuredList.length > 3 && (
+              <div className="featured-scroll-controls" role="group" aria-label="Featured products navigation">
+                <button
+                  type="button"
+                  className="featured-nav-btn prev"
+                  onClick={() => scrollFeatured('left')}
+                  disabled={!canScrollLeft}
+                  aria-label="Previous products"
+                  title="Scroll left"
+                >
+                  <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                    <polyline points="15 18 9 12 15 6" />
+                  </svg>
+                </button>
+                <button
+                  type="button"
+                  className="featured-nav-btn next"
+                  onClick={() => scrollFeatured('right')}
+                  disabled={!canScrollRight}
+                  aria-label="Next products"
+                  title="Scroll right"
+                >
+                  <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                    <polyline points="9 18 15 12 9 6" />
+                  </svg>
+                </button>
+              </div>
+            )}
+          </div>
         </div>
-        <div className="featured-grid store-content-animated" key={`featured-${activeCategoryId}`}>
+        <div
+          ref={featuredScrollRef}
+          className={`featured-grid store-content-animated ${featuredList.length > 3 ? 'is-scrollable' : ''} ${isDragging ? 'is-dragging' : ''}`}
+          key={`featured-${activeCategoryId}`}
+          tabIndex={featuredList.length > 3 ? 0 : undefined}
+          aria-label={`Featured ${activeCategory?.name || 'products'} list`}
+          onMouseDown={handleMouseDown}
+          onMouseMove={handleMouseMove}
+          onMouseUp={handleMouseUp}
+          onMouseLeave={handleMouseUp}
+          onClickCapture={handleClickCapture}
+        >
           {featuredList.map(p => (
             <ProductCard key={p.id} product={p} compact />
           ))}
           {featuredList.length === 0 && (
-            <div style={{ gridColumn: '1 / -1', padding: '30px', textAlign: 'center', color: '#74826b', background: '#f8faf5', borderRadius: '12px' }}>
+            <div style={{ padding: '30px', textAlign: 'center', color: '#74826b', background: '#f8faf5', borderRadius: '12px', width: '100%', flex: '1 1 100%' }}>
               <p>No featured products selected in {activeCategory?.name || 'this category'} yet. You can mark products as featured in the Admin Panel.</p>
             </div>
           )}
@@ -275,7 +471,7 @@ export function HomeClient({
         </div>
       </section>
 
-      {/* Why Us & Care Banner */}
+      {/* Why Us & Newsletter */}
       <div className="section-wrap lower-sections">
         <section className="why-us">
           <h2>Why Choose Kiaan?</h2>
@@ -294,21 +490,6 @@ export function HomeClient({
                 <p>{b.text}</p>
               </div>
             ))}
-          </div>
-        </section>
-
-        <section className="care-banner" id="care">
-          <div className="care-art" />
-          <div className="care-content">
-            <h2>{isAdenium ? 'Adenium Care Guide' : 'Plant Health & Soil Guide'}</h2>
-            <p>
-              {isAdenium
-                ? <>Simple tips for healthy growth,<br />more blooms and long life.</>
-                : <>Best practices on soil drainage, organic feeding,<br />and protecting Adenium from pests.</>}
-            </p>
-            <button className="pill light" onClick={() => setPanel('guide')}>
-              Explore Guide <Icon name="arrow" />
-            </button>
           </div>
         </section>
 

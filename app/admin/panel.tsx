@@ -630,8 +630,8 @@ ${det.rawItems.map(i => `• ${i}`).join('\n')}
 ===================================================
 FROM:
 Kiaan Nursery & Agro Care
-Habra, North 24 Parganas, West Bengal - 743263
-WhatsApp: +91 62894 17338`;
+Khudiram Bose Sarani, Ghosh Para, Howrah, West Bengal - 711227, India
+WhatsApp: +91 90388 23613`;
 
     navigator.clipboard.writeText(label);
     setCopiedOrderId(`label-${order.id}`);
@@ -1097,7 +1097,7 @@ WhatsApp: +91 62894 17338`;
                         const det = parseOrderDetails(o.details);
                         const statusTheme = getStatusTheme(o.status);
                         const cleanPhone = cust.phone;
-                        const whatsappMsg = `Hello ${cust.name}! Greetings from Kiaan Nursery & Agro Care, Habra.\n\nRegarding your order *#KIAAN-${shortId}* (Total: ₹${o.total}):\nWe are preparing your plants for dispatch. Please feel free to reply if you need live photos of your Adenium caudex or dispatch updates!\n\nThank you for choosing Kiaan Nursery.`;
+                        const whatsappMsg = `Hello ${cust.name}! Greetings from Kiaan Nursery & Agro Care, Howrah.\n\nRegarding your order *#KIAAN-${shortId}* (Total: ₹${o.total}):\nWe are preparing your plants for dispatch. Please feel free to reply if you need live photos of your Adenium caudex or dispatch updates!\n\nThank you for choosing Kiaan Nursery.`;
                         const whatsappUrl = cleanPhone ? `https://wa.me/91${cleanPhone}?text=${encodeURIComponent(whatsappMsg)}` : '';
                         const formattedDate = new Date(o.date).toLocaleDateString('en-IN', {
                           day: 'numeric',
@@ -1493,7 +1493,7 @@ WhatsApp: +91 62894 17338`;
                       rows={4}
                       required
                       maxLength={1500}
-                      placeholder="Items: Double Dark Red Adenium (Qty: 2, ₹599 each)&#10;Delivery Address: Flat 3B, Jessore Road, Habra - 743263"
+                      placeholder="Items: Double Dark Red Adenium (Qty: 2, ₹599 each)&#10;Delivery Address: Flat 3B, Ghosh Para, Howrah - 711227"
                     />
                   </label>
                   <label>
@@ -1782,7 +1782,7 @@ WhatsApp: +91 62894 17338`;
                 />
                 <div>
                   <strong>Kiaan Nursery &amp; Agro Care</strong>
-                  <p>Habra, North 24 Parganas, West Bengal · Ph: +91 62894 17338</p>
+                  <p>Khudiram Bose Sarani, Ghosh Para, Howrah, West Bengal - 711227 · Ph: +91 90388 23613</p>
                 </div>
               </div>
               <div className="slip-invoice-badge">
@@ -1845,8 +1845,8 @@ WhatsApp: +91 62894 17338`;
             </div>
 
             <div className="slip-footer-note">
-              <p>🌱 Thank you for choosing Kiaan Nursery &amp; Agro Care. Hand-nursed with organic care in Habra.</p>
-              <p>For repotting and watering guidance, connect on WhatsApp: <strong>+91 62894 17338</strong></p>
+              <p>🌱 Thank you for choosing Kiaan Nursery &amp; Agro Care. Hand-nursed with organic care in Howrah.</p>
+              <p>For repotting and watering guidance, connect on WhatsApp: <strong>+91 90388 23613</strong></p>
             </div>
 
             <div className="slip-actions-no-print">

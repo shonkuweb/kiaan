@@ -403,17 +403,17 @@ export function getDatabase(): DatabaseSync {
     }
   }
 
-  // Seed initial products if none exist
-  const productCount = (db.prepare('SELECT COUNT(*) as count FROM products').get() as { count: number }).count;
-  if (productCount === 0) {
-    const insertProd = db.prepare(`
-      INSERT INTO products (
-        id, name, price, stock, image, images, description, category_id,
-        is_featured, color, rating, reviews, created_at, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `);
-    const now = new Date().toISOString();
-    for (const p of initialProducts) {
+  // Seed initial products if missing
+  const insertProd = db.prepare(`
+    INSERT INTO products (
+      id, name, price, stock, image, images, description, category_id,
+      is_featured, color, rating, reviews, created_at, updated_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `);
+  const now = new Date().toISOString();
+  for (const p of initialProducts) {
+    const exists = db.prepare('SELECT id FROM products WHERE id = ?').get(p.id);
+    if (!exists) {
       insertProd.run(
         p.id,
         p.name,
@@ -762,6 +762,76 @@ export function getOrderByRazorpayOrderId(razorpayOrderId: string): Order | null
   };
 }
 
+export function generateSimpleOrderId(): string {
+  const db = getDatabase();
+  try {
+    const rows = db.prepare(`SELECT id FROM orders WHERE id LIKE 'KN-%'`).all() as unknown as Array<{ id: string }>;
+    let maxNum = 1000;
+    for (const r of rows) {
+      const match = String(r.id).match(/^KN-(\d+)$/i);
+      if (match) {
+        const num = parseInt(match[1], 10);
+        if (num > maxNum) maxNum = num;
+      }
+    }
+    const countRow = db.prepare(`SELECT COUNT(*) as cnt FROM orders`).get() as unknown as { cnt: number } | undefined;
+    const totalCount = countRow ? Number(countRow.cnt) : 0;
+    const nextNum = Math.max(maxNum + 1, 1001 + totalCount);
+    return `KN-${nextNum}`;
+  } catch {
+    const randomNum = Math.floor(1000 + Math.random() * 9000);
+    return `KN-${randomNum}`;
+  }
+}
+
+export function trackOrderByPhoneAndId(orderIdInput: string, phoneInput: string): Order | null {
+  const db = getDatabase();
+  const rawId = String(orderIdInput || '').trim().replace(/^#/, '');
+  const digitsOnly = rawId.replace(/\D/g, '');
+  const cleanPhone = String(phoneInput || '').replace(/\D/g, '');
+  const last10Phone = cleanPhone.slice(-10);
+
+  if (!rawId || last10Phone.length < 10) {
+    return null;
+  }
+
+  // Find candidate orders matching ID or numerical portion
+  const candidates = db.prepare(`
+    SELECT * FROM orders 
+    WHERE LOWER(id) = LOWER(?)
+       OR LOWER(id) = LOWER(?)
+       OR LOWER(id) LIKE LOWER(?)
+       OR (LENGTH(?) > 0 AND (id = 'KN-' || ? OR id LIKE '%-' || ?))
+  `).all(
+    rawId,
+    `KN-${rawId}`,
+    `%${rawId}%`,
+    digitsOnly,
+    digitsOnly,
+    digitsOnly
+  ) as unknown as DbOrderRow[];
+
+  for (const candidate of candidates) {
+    const combined = (candidate.customer + ' ' + candidate.details).replace(/\D/g, '');
+    if (combined.includes(last10Phone)) {
+      return {
+        id: candidate.id,
+        customer: candidate.customer,
+        details: candidate.details,
+        total: Number(candidate.total),
+        status: candidate.status,
+        razorpayOrderId: candidate.razorpay_order_id || '',
+        paymentId: candidate.payment_id || '',
+        paymentStatus: candidate.payment_status || 'pending',
+        paymentMethod: candidate.payment_method || 'razorpay',
+        date: candidate.created_at,
+      };
+    }
+  }
+
+  return null;
+}
+
 export function createOrder(data: {
   id?: string;
   customer: string;
@@ -774,7 +844,7 @@ export function createOrder(data: {
   paymentMethod?: string;
 }): Order {
   const db = getDatabase();
-  const id = data.id || crypto.randomUUID();
+  const id = data.id || generateSimpleOrderId();
   const now = new Date().toISOString();
   const status = data.status || 'Pending';
   const razorpayOrderId = data.razorpayOrderId || '';

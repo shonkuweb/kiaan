@@ -84,6 +84,22 @@ export default function AboutPage() {
                 <div className="founder-meta">
                   <strong className="founder-name">Shambhu Nath Naskar</strong>
                   <span className="founder-role">Co-owner</span>
+                  <a
+                    href="https://www.instagram.com/iamshamm220622"
+                    target="_blank"
+                    rel="noreferrer"
+                    style={{
+                      fontSize: '13px',
+                      color: '#215c26',
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '4px',
+                      marginTop: '4px',
+                      textDecoration: 'none',
+                    }}
+                  >
+                    <Icon name="instagram" /> @iamshamm220622
+                  </a>
                 </div>
               </div>
             </div>
@@ -97,7 +113,7 @@ export default function AboutPage() {
             <div className="story-card-thumb">
               <img
                 src="/images/about-adenium-card.webp"
-                alt="Pink Adenium Desert Rose Flower"
+                alt="Adenium desert rose plants blooming on display"
                 width="155"
                 height="120"
               />
@@ -132,7 +148,7 @@ export default function AboutPage() {
             <div className="story-card-thumb">
               <img
                 src="/images/about-agro-card.webp"
-                alt="Agro Care gardening tools and supplies"
+                alt="Kiaan Agro Care organic fertilizer, seeds, and gardening supplies"
                 width="155"
                 height="120"
               />

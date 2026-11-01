@@ -1,5 +1,5 @@
 import { NextRequest } from 'next/server';
-import { createOrder, getProductById, getStoreSettings } from '../../../../lib/server/db';
+import { createOrder, getProductById, getStoreSettings, generateSimpleOrderId } from '../../../../lib/server/db';
 import { createRazorpayOrder, getRazorpayConfig } from '../../../../lib/server/razorpay';
 
 export const runtime = 'nodejs';
@@ -82,8 +82,8 @@ export async function POST(request: NextRequest) {
     const shipping = (freeThreshold > 0 && verifiedSubtotal >= freeThreshold) ? 0 : standardCharge;
     const totalAmount = verifiedSubtotal + shipping;
 
-    const shortId = crypto.randomUUID().slice(0, 8).toUpperCase();
-    const receipt = `KIAAN-${shortId}`;
+    const simpleOrderId = generateSimpleOrderId();
+    const receipt = simpleOrderId;
 
     // Create Razorpay Order
     const razorpayOrder = await createRazorpayOrder({
@@ -93,7 +93,7 @@ export async function POST(request: NextRequest) {
         customer_name: name.trim(),
         customer_phone: cleanPhone,
         pincode: cleanPin,
-        receipt,
+        order_id: simpleOrderId,
       },
     });
 
@@ -106,6 +106,7 @@ export async function POST(request: NextRequest) {
 
     // Save pending order in SQLite database
     const localOrder = createOrder({
+      id: simpleOrderId,
       customer: customerSummary,
       details: orderDetails,
       total: totalAmount,

@@ -69,7 +69,7 @@ export type StoreSettingsConfig = {
 };
 
 type Cart = Record<string, number>;
-type Panel = 'menu' | 'search' | 'cart' | 'guide' | null;
+type Panel = 'menu' | 'search' | 'cart' | null;
 type Store = {
   products: Product[];
   cart: Cart;
@@ -326,9 +326,23 @@ export function Storefront({ children }: { children: React.ReactNode }) {
               <p>Grow greener, live better.<br />With Kiaan.</p>
               <div className="socials">
                 <button aria-label="YouTube" onClick={() => setInfo('Follow Kiaan')}><Icon name="youtube" /></button>
-                <button aria-label="Instagram" onClick={() => setInfo('Follow Kiaan')}><Icon name="instagram" /></button>
+                <a
+                  href="https://www.instagram.com/iamshamm220622"
+                  target="_blank"
+                  rel="noreferrer"
+                  aria-label="Follow Kiaan on Instagram (@iamshamm220622)"
+                >
+                  <Icon name="instagram" />
+                </a>
                 <button aria-label="Facebook" onClick={() => setInfo('Follow Kiaan')}><b>f</b></button>
-                <a href="https://wa.me/916289417338" target="_blank" rel="noreferrer" aria-label="Contact Kiaan on WhatsApp"><Icon name="phone" /></a>
+                <a
+                  href="https://wa.me/919038823613"
+                  target="_blank"
+                  rel="noreferrer"
+                  aria-label="Contact Kiaan on WhatsApp"
+                >
+                  <Icon name="phone" />
+                </a>
               </div>
             </div>
             <div className="footer-links">
@@ -362,9 +376,9 @@ export function Storefront({ children }: { children: React.ReactNode }) {
           <div className="footer-middle">
             <div className="get-in-touch">
               <h2>Get in Touch</h2>
-              <a href="tel:+916289417338"><Icon name="phone" />+91 62894 17338</a>
-              <a href="mailto:kiaan@nursery.in"><Icon name="mail" />kiaan@nursery.in</a>
-              <p><Icon name="pin" /><span>Habra, North 24 Parganas,<br />West Bengal</span></p>
+              <a href="tel:+919038823613"><Icon name="phone" />+91 90388 23613</a>
+              <a href="mailto:shambhu.bally88@gmail.com"><Icon name="mail" />shambhu.bally88@gmail.com</a>
+              <p><Icon name="pin" /><span>Khudiram Bose Sarani, Ghosh Para,<br />Howrah, West Bengal 711227, India</span></p>
             </div>
             <div className="footer-newsletter">
               <h2>Stay Updated</h2>
@@ -374,7 +388,7 @@ export function Storefront({ children }: { children: React.ReactNode }) {
           </div>
           <div className="footer-bottom">
             <p>© 2026 Kiaan Nursery. All rights reserved.</p>
-            <p>Made with <span className="red-heart">♥</span> in Kolkata</p>
+            <p>Made with <span className="red-heart">♥</span> in Howrah</p>
           </div>
         </div>
         <svg className="bottom-wave" viewBox="0 0 1440 120" preserveAspectRatio="none" aria-hidden="true">
@@ -431,7 +445,7 @@ export function Storefront({ children }: { children: React.ReactNode }) {
               <div className="dialog-heading">
                 <h2 id="dialog-title">
                   {panel === 'cart' && <Icon name="cart" />}
-                  {info || (panel === 'menu' ? 'Welcome to Kiaan' : panel === 'search' ? 'Find your perfect Adenium' : panel === 'cart' ? <>Your Cart <span className="cart-title-count">({count} {count === 1 ? 'Item' : 'Items'})</span></> : 'Adenium Care Guide')}
+                  {info || (panel === 'menu' ? 'Welcome to Kiaan' : panel === 'search' ? 'Find your perfect Adenium' : panel === 'cart' ? <>Your Cart <span className="cart-title-count">({count} {count === 1 ? 'Item' : 'Items'})</span></> : 'Kiaan Nursery')}
                 </h2>
                 <button className="icon-button" aria-label="Close dialog" onClick={() => { setPanel(null); setInfo(null); }}>
                   <Icon name="close" />
@@ -488,14 +502,14 @@ export function Storefront({ children }: { children: React.ReactNode }) {
                   <Link href="/about" onClick={() => setPanel(null)}>
                     About Us<Icon name="arrow" />
                   </Link>
+                  <Link href="/track" onClick={() => setPanel(null)}>
+                    Track Your Order<Icon name="arrow" />
+                  </Link>
                   <Link href="/checkout" onClick={() => setPanel(null)}>
                     Checkout<Icon name="arrow" />
                   </Link>
                   <Link href="/#reviews" onClick={() => setPanel(null)}>
                     Customer Reviews<Icon name="arrow" />
-                  </Link>
-                  <Link href="/#care" onClick={() => setPanel(null)}>
-                    Plant Care<Icon name="arrow" />
                   </Link>
                   <Link href="#contact" onClick={() => setPanel(null)}>
                     Contact Us<Icon name="arrow" />
@@ -547,37 +561,30 @@ export function Storefront({ children }: { children: React.ReactNode }) {
 
               {panel === 'cart' && <CartContent />}
 
-              {panel === 'guide' && (
-                <div className="guide-content">
-                  <img src="/images/care-guide.webp" alt="Flowering Adenium in a pot" />
-                  <p>A little care goes a long way. Give your Adenium the right conditions for healthy growth and beautiful flowers.</p>
-                  <h3>Let the sunshine in</h3>
-                  <p>Choose a bright spot with plenty of direct sunlight. Introduce plants to stronger sun gradually.</p>
-                  <h3>Water with care</h3>
-                  <p>Allow the potting mix to dry between waterings. Avoid standing water, especially during cool or rainy weather.</p>
-                  <h3>Keep roots happy</h3>
-                  <p>Use a pot with drainage holes and a loose, well-draining growing mix. Protect your plant from cold and frost.</p>
-                  <h3>A little extra love</h3>
-                  <p>Feed lightly during active growth and check leaves regularly. Keep plants away from children and pets.</p>
-                  <a href="https://wa.me/916289417338" className="text-link" target="_blank" rel="noreferrer">
-                    Ask us about your plant <Icon name="arrow" />
-                  </a>
-                </div>
-              )}
-
               {info && (
                 <div className="info-content">
                   {info === 'Customer reviews' ? (
                     <p>The reviews and rating shown on this homepage reproduce the supplied design. Verified customer reviews will appear here when the store launches.</p>
                   ) : info === 'About Kiaan' ? (
-                    <p>Kiaan Agro Care &amp; Nursery is based in Habra, North 24 Parganas, West Bengal. We bring beautiful Adenium varieties and plant care support to your garden.</p>
+                    <p>Kiaan Agro Care &amp; Nursery is based in Howrah, West Bengal (Khudiram Bose Sarani, Ghosh Para, Howrah 711227, India). We bring beautiful Adenium varieties and plant care support to your garden.</p>
                   ) : info === 'Follow Kiaan' ? (
-                    <p>Our social profiles will be linked here when the store launches. For now, connect with us on WhatsApp for plant updates.</p>
+                    <p>
+                      Follow us on Instagram:{' '}
+                      <a
+                        href="https://www.instagram.com/iamshamm220622"
+                        target="_blank"
+                        rel="noreferrer"
+                        style={{ textDecoration: 'underline', fontWeight: 600 }}
+                      >
+                        @iamshamm220622
+                      </a>
+                      . You can also connect with us on WhatsApp at +91 90388 23613 for nursery updates and plant availability.
+                    </p>
                   ) : (
-                    <p>{info === 'Help & Support' ? 'Need help choosing or caring for an Adenium? Get in touch with our nursery team.' : 'Our store is getting ready to launch. Please contact the nursery for current details before placing an order.'}</p>
+                    <p>{info === 'Help & Support' ? 'Need help choosing an Adenium or garden supply? Get in touch with our nursery team.' : 'Our store is getting ready to launch. Please contact the nursery for current details before placing an order.'}</p>
                   )}
-                  <a href="mailto:kiaan@nursery.in"><Icon name="mail" />kiaan@nursery.in</a>
-                  <a href="tel:+916289417338"><Icon name="phone" />+91 62894 17338</a>
+                  <a href="mailto:shambhu.bally88@gmail.com"><Icon name="mail" />shambhu.bally88@gmail.com</a>
+                  <a href="tel:+919038823613"><Icon name="phone" />+91 90388 23613</a>
                 </div>
               )}
             </div>
@@ -594,7 +601,7 @@ export function NewsletterForm({ footer = false }: { footer?: boolean }) {
   const [message, setMessage] = useState('');
   function subscribe(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    window.location.href = `mailto:kiaan@nursery.in?subject=${encodeURIComponent('New arrivals subscription')}&body=${encodeURIComponent(`Please add ${email.trim()} to Kiaan's new arrivals and offers mailing list.`)}`;
+    window.location.href = `mailto:shambhu.bally88@gmail.com?subject=${encodeURIComponent('New arrivals subscription')}&body=${encodeURIComponent(`Please add ${email.trim()} to Kiaan's new arrivals and offers mailing list.`)}`;
     setMessage('Send the email request to join our updates.');
   }
   return (
@@ -720,7 +727,7 @@ function CartContent() {
           className="text-link"
           target="_blank"
           rel="noreferrer"
-          href={`https://wa.me/916289417338?text=${encodeURIComponent(
+          href={`https://wa.me/919038823613?text=${encodeURIComponent(
             `Hello Kiaan! I'm looking at these plants:\n${items.map(p => `${p.name} × ${cart[p.id]} — ${money(p.price * cart[p.id])}`).join('\n')}\nSubtotal: ${money(subtotal)}`
           )}`}
         >
