@@ -29,6 +29,9 @@ export async function POST(request: NextRequest) {
     const categoryId = String(body.categoryId || '').trim();
     const price = Number(body.price);
     const originalPrice = body.originalPrice !== undefined && body.originalPrice !== '' && Number(body.originalPrice) > 0 ? Number(body.originalPrice) : undefined;
+    const deliveryCharge = body.deliveryCharge !== undefined && body.deliveryCharge !== null && body.deliveryCharge !== '' && !isNaN(Number(body.deliveryCharge))
+      ? Math.max(0, Number(body.deliveryCharge))
+      : undefined;
     const stock = Number(body.stock);
     const description = String(body.description || '').trim();
     const images = Array.isArray(body.images) ? body.images : [];
@@ -62,6 +65,7 @@ export async function POST(request: NextRequest) {
       categoryId,
       price,
       originalPrice,
+      deliveryCharge,
       stock,
       description,
       images,
@@ -106,6 +110,9 @@ export async function PUT(request: NextRequest) {
     const originalPrice = body.originalPrice !== undefined
       ? (body.originalPrice === '' || body.originalPrice === null || Number(body.originalPrice) <= 0 ? undefined : Number(body.originalPrice))
       : existing.originalPrice;
+    const deliveryCharge = body.deliveryCharge !== undefined
+      ? (body.deliveryCharge === '' || body.deliveryCharge === null || isNaN(Number(body.deliveryCharge)) ? null : Math.max(0, Number(body.deliveryCharge)))
+      : existing.deliveryCharge;
     const stock = body.stock !== undefined ? Number(body.stock) : existing.stock;
     const description = body.description !== undefined ? String(body.description).trim() : existing.description;
     const images = Array.isArray(body.images) ? body.images : existing.images;
@@ -138,6 +145,7 @@ export async function PUT(request: NextRequest) {
       categoryId,
       price,
       originalPrice,
+      deliveryCharge,
       stock,
       description,
       images,

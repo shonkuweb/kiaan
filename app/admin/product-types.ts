@@ -3,6 +3,7 @@ export type InventoryProduct = {
   name: string;
   price: number;
   originalPrice?: number;
+  deliveryCharge?: number | null;
   stock: number;
   image: string;
   images: string[];

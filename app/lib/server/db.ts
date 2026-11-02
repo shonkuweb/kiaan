@@ -7,6 +7,7 @@ export type Product = {
   name: string;
   price: number;
   originalPrice?: number;
+  deliveryCharge?: number | null;
   stock: number;
   image: string;
   images: string[];
@@ -65,6 +66,7 @@ type DbProductRow = {
   name: string;
   price: number;
   original_price?: number | null;
+  delivery_charge?: number | null;
   stock: number;
   image: string;
   images: string;
@@ -305,6 +307,8 @@ export function getDatabase(): DatabaseSync {
       id TEXT PRIMARY KEY,
       name TEXT NOT NULL,
       price REAL NOT NULL,
+      original_price REAL DEFAULT NULL,
+      delivery_charge REAL DEFAULT NULL,
       stock INTEGER NOT NULL DEFAULT 0,
       image TEXT NOT NULL DEFAULT '',
       images TEXT NOT NULL DEFAULT '[]',
@@ -390,6 +394,11 @@ export function getDatabase(): DatabaseSync {
   }
   try {
     db.exec('ALTER TABLE products ADD COLUMN original_price REAL DEFAULT NULL;');
+  } catch {
+    // Column already exists
+  }
+  try {
+    db.exec('ALTER TABLE products ADD COLUMN delivery_charge REAL DEFAULT NULL;');
   } catch {
     // Column already exists
   }
@@ -483,6 +492,7 @@ function rowToProduct(row: DbProductRow): Product {
     name: row.name,
     price: Number(row.price),
     originalPrice: row.original_price != null && Number(row.original_price) > 0 ? Number(row.original_price) : undefined,
+    deliveryCharge: row.delivery_charge != null && !isNaN(Number(row.delivery_charge)) ? Number(row.delivery_charge) : undefined,
     stock: Number(row.stock),
     image: row.image,
     images: images.length > 0 ? images : row.image ? [row.image] : [],
@@ -538,6 +548,7 @@ export function createProduct(data: {
   name: string;
   price: number;
   originalPrice?: number;
+  deliveryCharge?: number | null;
   stock: number;
   image?: string;
   images?: string[];
@@ -559,13 +570,16 @@ export function createProduct(data: {
   const images = data.images && data.images.length > 0 ? data.images : data.image ? [data.image] : [];
   const primaryImage = images[0] || data.image || '';
   const originalPrice = data.originalPrice !== undefined && Number(data.originalPrice) > 0 ? Number(data.originalPrice) : null;
+  const deliveryCharge = data.deliveryCharge !== undefined && data.deliveryCharge !== null && (data.deliveryCharge as unknown) !== '' && !isNaN(Number(data.deliveryCharge))
+    ? Math.max(0, Number(data.deliveryCharge))
+    : null;
 
   const stmt = db.prepare(`
     INSERT INTO products (
-      id, name, price, original_price, stock, image, images, description, category_id,
+      id, name, price, original_price, delivery_charge, stock, image, images, description, category_id,
       is_featured, color, rating, reviews, pot_size, plant_height, details,
       shipping_info, returns_info, created_at, updated_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `);
 
   stmt.run(
@@ -573,6 +587,7 @@ export function createProduct(data: {
     data.name.trim(),
     Number(data.price),
     originalPrice,
+    deliveryCharge,
     Number(data.stock),
     primaryImage,
     JSON.stringify(images),
@@ -605,6 +620,9 @@ export function updateProduct(id: string, data: Partial<Product>): Product | nul
   const originalPrice = data.originalPrice !== undefined
     ? (Number(data.originalPrice) > 0 ? Number(data.originalPrice) : null)
     : (existing.originalPrice || null);
+  const deliveryCharge = data.deliveryCharge !== undefined
+    ? (data.deliveryCharge === null || (data.deliveryCharge as unknown) === '' || isNaN(Number(data.deliveryCharge)) ? null : Math.max(0, Number(data.deliveryCharge)))
+    : (existing.deliveryCharge ?? null);
   const stock = data.stock !== undefined ? Number(data.stock) : existing.stock;
   const images = data.images !== undefined ? data.images : existing.images;
   const primaryImage = images[0] || (data.image !== undefined ? data.image : existing.image);
@@ -625,6 +643,7 @@ export function updateProduct(id: string, data: Partial<Product>): Product | nul
       name = ?,
       price = ?,
       original_price = ?,
+      delivery_charge = ?,
       stock = ?,
       image = ?,
       images = ?,
@@ -647,6 +666,7 @@ export function updateProduct(id: string, data: Partial<Product>): Product | nul
     name,
     price,
     originalPrice,
+    deliveryCharge,
     stock,
     primaryImage,
     JSON.stringify(images),

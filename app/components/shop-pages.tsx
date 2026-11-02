@@ -1,7 +1,7 @@
 'use client';
 import Link from 'next/link';
 import { useState, useRef } from 'react';
-import { money, getProductImageUrl, type Product } from '../lib/products';
+import { money, getProductImageUrl, hasCustomDelivery, type Product } from '../lib/products';
 import { Icon, ProductCard, useStore, type IconName } from './storefront';
 
 function Breadcrumb({ product }: { product?: Product }) {
@@ -397,9 +397,16 @@ export function ProductDetails({
               icon: 'truck',
               title: 'Shipping & Delivery',
               content: (
-                <p>
-                  {product.shippingInfo || 'Plants and products are packed with special care for safe nationwide transit. Contact our team to verify pin-code serviceability, transit duration, and shipping charges before ordering.'}
-                </p>
+                <div>
+                  {hasCustomDelivery(product) && (
+                    <div style={{ marginBottom: '10px', padding: '8px 12px', background: '#ecfdf5', border: '1px solid #a7f3d0', borderRadius: '8px', color: '#065f46', fontSize: '13px', fontWeight: 600 }}>
+                      🚚 Delivery charge for this item: {money(product.deliveryCharge)}
+                    </div>
+                  )}
+                  <p>
+                    {product.shippingInfo || 'Plants and products are packed with special care for safe nationwide transit. Contact our team to verify pin-code serviceability, transit duration, and shipping charges before ordering.'}
+                  </p>
+                </div>
               ),
             },
             {

@@ -30,6 +30,24 @@ export function HomeClient({
 }) {
   const { setPanel, setInfo, products: storeProducts } = useStore();
   const [hero, setHero] = useState<HeroBanner | null>(initialHero);
+  const [activeImageIndex, setActiveImageIndex] = useState(0);
+
+  const bannerImages = Array.isArray(hero?.images) && hero.images.length > 0
+    ? hero.images
+    : [hero?.imageUrl || '/images/hero-flower.webp'];
+
+  // Rotate hero banner image every 2 seconds
+  useEffect(() => {
+    if (bannerImages.length <= 1) {
+      setActiveImageIndex(0);
+      return;
+    }
+    const timer = setInterval(() => {
+      setActiveImageIndex(prev => (prev + 1) % bannerImages.length);
+    }, 2000);
+
+    return () => clearInterval(timer);
+  }, [bannerImages.length]);
 
   const [categories, setCategories] = useState<Category[]>(initialCategories);
   const [activeCategoryId, setActiveCategoryId] = useState<string>(
@@ -219,12 +237,25 @@ export function HomeClient({
     <main>
       <section className="hero" aria-label="Adenium collection">
         <div className="hero-art" aria-hidden="true">
-          <img
-            src={hero?.imageUrl || '/images/hero-flower.webp'}
-            alt=""
-            className="hero-img"
-            fetchPriority="high"
-          />
+          {bannerImages.map((src, idx) => (
+            <img
+              key={src + idx}
+              src={src}
+              alt=""
+              className={`hero-img ${idx === activeImageIndex ? 'active' : ''}`}
+              style={{
+                position: 'absolute',
+                inset: 0,
+                width: '100%',
+                height: '100%',
+                objectFit: 'cover',
+                opacity: idx === activeImageIndex ? 1 : 0,
+                transition: 'opacity 0.6s ease-in-out',
+                zIndex: idx === activeImageIndex ? 2 : 1,
+              }}
+              fetchPriority={idx === 0 ? 'high' : 'auto'}
+            />
+          ))}
         </div>
         <div className="hero-content">
           <p className="eyebrow">— &nbsp;Adenium Specialists&nbsp; —</p>
@@ -246,6 +277,19 @@ export function HomeClient({
             Shop Adenium <Icon name="arrow" />
           </a>
         </div>
+        {bannerImages.length > 1 && (
+          <div className="hero-dots" aria-hidden="true">
+            {bannerImages.map((_, idx) => (
+              <button
+                key={idx}
+                type="button"
+                className={`hero-dot ${idx === activeImageIndex ? 'active' : ''}`}
+                onClick={() => setActiveImageIndex(idx)}
+                aria-label={`Go to slide ${idx + 1}`}
+              />
+            ))}
+          </div>
+        )}
       </section>
 
       <div className="intro-wrap">

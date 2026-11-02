@@ -1,3 +1,5 @@
+import path from 'node:path';
+import fs from 'node:fs';
 import { PutObjectCommand } from '@aws-sdk/client-s3';
 import { checkLocalAdmin, r2Config } from '../../../../lib/server/r2';
 export const runtime = 'nodejs';
@@ -23,9 +25,21 @@ export async function POST(request: Request) {
     const bytes = Buffer.from(await file.arrayBuffer());
     const type = bytes.subarray(0, 3).equals(Buffer.from([0xff,0xd8,0xff])) ? 'jpeg' : bytes.subarray(0,8).equals(Buffer.from([137,80,78,71,13,10,26,10])) ? 'png' : bytes.toString('ascii',0,4) === 'RIFF' && bytes.toString('ascii',8,12) === 'WEBP' ? 'webp' : null;
     if (!type || file.type !== `image/${type}`) return Response.json({ error: 'This file is not a supported image. Choose JPG, PNG or WebP.' }, { status: 400 });
-    const { client, bucket, publicUrl } = r2Config();
-    const key = `kiaan/hero/${crypto.randomUUID()}.${type}`;
-    await client.send(new PutObjectCommand({ Bucket: bucket, Key: key, Body: bytes, ContentType: `image/${type}`, CacheControl: 'public, max-age=31536000, immutable' }));
-    return Response.json({ url: `${publicUrl}/${key}`, name: file.name });
+
+    let uploadUrl = '';
+    try {
+      const { client, bucket, publicUrl } = r2Config();
+      const key = `kiaan/hero/${crypto.randomUUID()}.${type}`;
+      await client.send(new PutObjectCommand({ Bucket: bucket, Key: key, Body: bytes, ContentType: `image/${type}`, CacheControl: 'public, max-age=31536000, immutable' }));
+      uploadUrl = `${publicUrl}/${key}`;
+    } catch {
+      const filename = `hero-${crypto.randomUUID()}.${type}`;
+      const uploadsDir = path.join(process.cwd(), 'public', 'images');
+      if (!fs.existsSync(uploadsDir)) fs.mkdirSync(uploadsDir, { recursive: true });
+      fs.writeFileSync(path.join(uploadsDir, filename), bytes);
+      uploadUrl = `/images/${filename}`;
+    }
+
+    return Response.json({ url: uploadUrl, name: file.name });
   } catch { return Response.json({ error: 'Image upload failed. Please try again.' }, { status: 502 }); }
 }

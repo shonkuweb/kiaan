@@ -3,7 +3,7 @@
 import { createContext, useContext, useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { money, getProductImageUrl, type Product, type Category } from '../lib/products';
+import { money, getProductImageUrl, calculateDeliveryFee, hasCustomDelivery, type Product, type Category } from '../lib/products';
 
 export type IconName = 'menu' | 'search' | 'cart' | 'heart' | 'arrow' | 'leaf' | 'shield' | 'truck' | 'support' | 'mail' | 'close' | 'minus' | 'plus' | 'box' | 'return' | 'file' | 'phone' | 'pin' | 'instagram' | 'youtube' | 'trash' | 'tag' | 'filter' | 'grid' | 'chevron' | 'pot' | 'height' | 'flower' | 'check';
 
@@ -656,14 +656,21 @@ function CartContent() {
   const { cart, quantity, remove, setPanel, products: catalog, settings } = useStore();
 
   const items = catalog.filter(p => cart[p.id] && cart[p.id] > 0);
-  const count = items.reduce((sum, p) => sum + cart[p.id], 0);
-  const subtotal = items.reduce((sum, p) => sum + p.price * cart[p.id], 0);
-
-  const freeThreshold = settings.freeDeliveryThreshold ?? 999;
-  const deliveryCharge = settings.deliveryCharge ?? 69;
-  const isFreeDelivery = freeThreshold > 0 && subtotal >= freeThreshold;
-  const shippingFee = count > 0 && subtotal > 0 ? (isFreeDelivery ? 0 : deliveryCharge) : 0;
-  const grandTotal = subtotal + shippingFee;
+  const cartItemsWithQty = items.map(p => ({ ...p, quantity: cart[p.id] }));
+  const deliveryCalc = calculateDeliveryFee(cartItemsWithQty, settings);
+  const count = deliveryCalc.itemCount;
+  const subtotal = deliveryCalc.subtotal;
+  const shippingFee = deliveryCalc.shippingFee;
+  const grandTotal = deliveryCalc.totalAmount;
+  const {
+    customDeliveryFee,
+    globalDeliveryFee,
+    hasCustomDeliveryItems,
+    hasGlobalDeliveryItems,
+    isGlobalFreeDelivery,
+    freeShippingThreshold,
+    amountNeededForFreeDelivery,
+  } = deliveryCalc;
 
   const minVal = settings.minOrderValue ?? 0;
   const minQty = settings.minOrderQuantity ?? 1;
@@ -691,7 +698,13 @@ function CartContent() {
             <div className="cart-product-info">
               <h3><Link href={`/products/${p.id}`} onClick={() => setPanel(null)}>{p.name}</Link></h3>
               <p className="cart-unit-price">{money(p.price)}</p>
-              <p className="cart-pot-size">Pot Size: 4–5 inch</p>
+              {hasCustomDelivery(p) ? (
+                <p className="cart-delivery-badge" style={{ fontSize: '11px', color: '#047857', background: '#ecfdf5', padding: '2px 6px', borderRadius: '4px', width: 'fit-content', marginTop: '3px', fontWeight: 600 }}>
+                  Delivery: {money(p.deliveryCharge)}
+                </p>
+              ) : (
+                <p className="cart-pot-size">Pot Size: 4–5 inch</p>
+              )}
             </div>
             <button className="remove-item icon-button" aria-label={`Remove ${p.name} from cart`} onClick={() => remove(p.id)}>
               <Icon name="trash" />
@@ -715,16 +728,31 @@ function CartContent() {
           </div>
           <div>
             <dt>Shipping</dt>
-            <dd>{isFreeDelivery ? <span style={{ color: '#1a6224', fontWeight: 700 }}>FREE</span> : money(shippingFee)}</dd>
+            <dd>{shippingFee === 0 ? <span style={{ color: '#1a6224', fontWeight: 700 }}>FREE</span> : money(shippingFee)}</dd>
           </div>
+          {hasCustomDeliveryItems && hasGlobalDeliveryItems && (
+            <div style={{ fontSize: '11px', color: '#64748b', marginTop: '-4px', marginBottom: '4px', display: 'flex', justifyContent: 'flex-end', width: '100%' }}>
+              <span>({money(customDeliveryFee)} item delivery + {isGlobalFreeDelivery ? 'FREE standard' : `${money(globalDeliveryFee)} standard`})</span>
+            </div>
+          )}
+          {hasCustomDeliveryItems && !hasGlobalDeliveryItems && (
+            <div style={{ fontSize: '11px', color: '#64748b', marginTop: '-4px', marginBottom: '4px', display: 'flex', justifyContent: 'flex-end', width: '100%' }}>
+              <span>(Separate item delivery)</span>
+            </div>
+          )}
           <div className="summary-total">
             <dt>Total</dt>
             <dd>{money(grandTotal)}</dd>
           </div>
         </dl>
-        {freeThreshold > 0 && !isFreeDelivery && subtotal > 0 && (
+        {hasGlobalDeliveryItems && freeShippingThreshold > 0 && !isGlobalFreeDelivery && amountNeededForFreeDelivery > 0 && (
           <p style={{ fontSize: '12px', color: '#1f5018', marginTop: '8px' }}>
-            Add {money(freeThreshold - subtotal)} more for <strong>FREE Delivery</strong>!
+            Add {money(amountNeededForFreeDelivery)} more standard items for <strong>FREE Standard Delivery</strong>!
+          </p>
+        )}
+        {!hasCustomDeliveryItems && freeShippingThreshold > 0 && !isGlobalFreeDelivery && subtotal > 0 && (
+          <p style={{ fontSize: '12px', color: '#1f5018', marginTop: '8px' }}>
+            Add {money(freeShippingThreshold - subtotal)} more for <strong>FREE Delivery</strong>!
           </p>
         )}
       </section>

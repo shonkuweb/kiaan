@@ -11,20 +11,82 @@ export function r2Config() {
   };
 }
 export async function readHero(): Promise<HeroBanner> {
-  const { client, bucket } = r2Config();
   try {
+    const { client, bucket } = r2Config();
     const response = await client.send(new GetObjectCommand({ Bucket: bucket, Key: heroKey }));
     const hero = JSON.parse(await response.Body!.transformToString());
-    if (typeof hero.title !== 'string' || typeof hero.subtitle !== 'string' || typeof hero.imageUrl !== 'string') throw new Error('Invalid saved banner.');
-    return hero;
+    if (typeof hero.title === 'string' && typeof hero.subtitle === 'string') {
+      const images: string[] = Array.isArray(hero.images) && hero.images.length > 0
+        ? hero.images.slice(0, 3)
+        : (hero.imageUrl ? [hero.imageUrl] : (defaultHero.images || [defaultHero.imageUrl]));
+      return {
+        title: hero.title,
+        subtitle: hero.subtitle,
+        imageUrl: images[0] || defaultHero.imageUrl,
+        images,
+      };
+    }
   } catch (error) {
     if (error instanceof Error && error.name === 'NoSuchKey') return defaultHero;
-    throw error;
   }
+
+  // SQLite fallback if R2 is unavailable
+  try {
+    const { getDatabase } = await import('./db');
+    const db = getDatabase();
+    const row = db.prepare('SELECT value FROM settings WHERE key = ?').get('hero_banner') as { value: string } | undefined;
+    if (row && row.value) {
+      const hero = JSON.parse(row.value);
+      if (typeof hero.title === 'string' && typeof hero.subtitle === 'string') {
+        const images: string[] = Array.isArray(hero.images) && hero.images.length > 0
+          ? hero.images.slice(0, 3)
+          : (hero.imageUrl ? [hero.imageUrl] : (defaultHero.images || [defaultHero.imageUrl]));
+        return {
+          title: hero.title,
+          subtitle: hero.subtitle,
+          imageUrl: images[0] || defaultHero.imageUrl,
+          images,
+        };
+      }
+    }
+  } catch {
+    // ignore db error
+  }
+
+  return defaultHero;
 }
-export async function writeHero(hero: HeroBanner) {
-  const { client, bucket } = r2Config();
-  await client.send(new PutObjectCommand({ Bucket: bucket, Key: heroKey, Body: JSON.stringify(hero), ContentType: 'application/json', CacheControl: 'no-store' }));
+export async function writeHero(hero: HeroBanner): Promise<HeroBanner> {
+  const images = Array.isArray(hero.images) && hero.images.length > 0
+    ? hero.images.slice(0, 3)
+    : [hero.imageUrl || defaultHero.imageUrl];
+  const payload: HeroBanner = {
+    title: hero.title.trim(),
+    subtitle: hero.subtitle.trim(),
+    imageUrl: images[0],
+    images,
+  };
+
+  // Save to SQLite
+  try {
+    const { getDatabase } = await import('./db');
+    const db = getDatabase();
+    db.prepare('INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value').run(
+      'hero_banner',
+      JSON.stringify(payload)
+    );
+  } catch {
+    // ignore db error
+  }
+
+  // Save to R2 if configured
+  try {
+    const { client, bucket } = r2Config();
+    await client.send(new PutObjectCommand({ Bucket: bucket, Key: heroKey, Body: JSON.stringify(payload), ContentType: 'application/json', CacheControl: 'no-store' }));
+  } catch {
+    // ignore R2 error if local DB succeeded
+  }
+
+  return payload;
 }
 export function checkLocalAdmin(request: Request): Response | null {
   // Verify admin session cookie

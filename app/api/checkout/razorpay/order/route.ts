@@ -1,6 +1,7 @@
 import { NextRequest } from 'next/server';
 import { createOrder, getProductById, getStoreSettings, generateSimpleOrderId } from '../../../../lib/server/db';
 import { createRazorpayOrder, getRazorpayConfig } from '../../../../lib/server/razorpay';
+import { calculateDeliveryFee } from '../../../../lib/products';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -38,13 +39,14 @@ export async function POST(request: NextRequest) {
 
     // Verify prices against database to protect against client-side tampering
     let verifiedSubtotal = 0;
-    const verifiedItems: Array<{ id: string; name: string; price: number; quantity: number }> = [];
+    const verifiedItems: Array<{ id: string; name: string; price: number; quantity: number; deliveryCharge?: number | null }> = [];
 
     for (const item of items) {
       const product = getProductById(item.id);
       const qty = Math.min(99, Math.max(1, Number(item.quantity) || 1));
       const price = product ? product.price : Number(item.price);
       const itemName = product ? product.name : item.name;
+      const deliveryCharge = product?.deliveryCharge ?? null;
 
       verifiedSubtotal += price * qty;
       verifiedItems.push({
@@ -52,6 +54,7 @@ export async function POST(request: NextRequest) {
         name: itemName,
         price,
         quantity: qty,
+        deliveryCharge,
       });
     }
 
@@ -76,11 +79,10 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Dynamic shipping logic from store settings
-    const freeThreshold = storeSettings.freeDeliveryThreshold ?? 999;
-    const standardCharge = storeSettings.deliveryCharge ?? 69;
-    const shipping = (freeThreshold > 0 && verifiedSubtotal >= freeThreshold) ? 0 : standardCharge;
-    const totalAmount = verifiedSubtotal + shipping;
+    // Dynamic delivery calculation (supporting separate product delivery charges + global delivery charge)
+    const deliveryCalc = calculateDeliveryFee(verifiedItems, storeSettings);
+    const shipping = deliveryCalc.shippingFee;
+    const totalAmount = deliveryCalc.totalAmount;
 
     const simpleOrderId = generateSimpleOrderId();
     const receipt = simpleOrderId;
@@ -100,9 +102,14 @@ export async function POST(request: NextRequest) {
     const fullAddress = `${address.trim()}${landmark ? `, Near ${landmark.trim()}` : ''}, ${city.trim()}, ${state.trim()} - ${cleanPin}`;
     const customerSummary = `${name.trim()} | Ph: ${cleanPhone}${email ? ` | ${email.trim()}` : ''}`;
     const itemsSummary = verifiedItems
-      .map(i => `${i.name} (Qty: ${i.quantity}, ₹${i.price} each)`)
+      .map(i => `${i.name} (Qty: ${i.quantity}, ₹${i.price} each${i.deliveryCharge != null ? `, Item Delivery: ₹${i.deliveryCharge}` : ''})`)
       .join('; ');
-    const orderDetails = `Items: ${itemsSummary}\nDelivery Address: ${fullAddress}\nShipping: ₹${shipping}\nPayment: Razorpay Online (Pending)\nRazorpay Order ID: ${razorpayOrder.id}${notes ? `\nNotes: ${notes.trim()}` : ''}`;
+    const shippingNote = deliveryCalc.hasCustomDeliveryItems && deliveryCalc.hasGlobalDeliveryItems
+      ? ` (₹${deliveryCalc.customDeliveryFee} separate item delivery + ₹${deliveryCalc.globalDeliveryFee} standard delivery)`
+      : deliveryCalc.hasCustomDeliveryItems
+        ? ' (Separate item delivery)'
+        : '';
+    const orderDetails = `Items: ${itemsSummary}\nDelivery Address: ${fullAddress}\nShipping: ₹${shipping}${shippingNote}\nPayment: Razorpay Online (Pending)\nRazorpay Order ID: ${razorpayOrder.id}${notes ? `\nNotes: ${notes.trim()}` : ''}`;
 
     // Save pending order in SQLite database
     const localOrder = createOrder({

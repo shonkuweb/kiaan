@@ -66,6 +66,10 @@ export function ProductEditor({ product, categories, categoryId, onClose, onSave
     const price = Number(text('price'));
     const origPriceText = text('originalPrice');
     const originalPrice = origPriceText && Number(origPriceText) > 0 ? Number(origPriceText) : undefined;
+    const deliveryChargeText = text('deliveryCharge');
+    const deliveryCharge = deliveryChargeText !== '' && !isNaN(Number(deliveryChargeText))
+      ? Math.max(0, Number(deliveryChargeText))
+      : null;
     const stock = Number(text('stock'));
     if (!text('name') || !categories.some(c => c.id === text('categoryId'))) {
       return setError('Enter a name and choose a category.');
@@ -85,6 +89,7 @@ export function ProductEditor({ product, categories, categoryId, onClose, onSave
         categoryId: text('categoryId'),
         price,
         originalPrice,
+        deliveryCharge,
         stock,
         image: images[0] || product?.image || '',
         images,
@@ -218,10 +223,27 @@ export function ProductEditor({ product, categories, categoryId, onClose, onSave
               </label>
             </div>
 
-            <label style={{ marginTop: '14px' }}>
-              <span>Stock quantity (available units) <span style={{ color: '#b91c1c' }}>*</span></span>
-              <input name="stock" type="number" min="0" max="1000000" step="1" defaultValue={product?.stock ?? 0} required disabled={uploading} />
-            </label>
+            <div className="admin-form-grid" style={{ marginTop: '14px' }}>
+              <label>
+                <span>Stock quantity (available units) <span style={{ color: '#b91c1c' }}>*</span></span>
+                <input name="stock" type="number" min="0" max="1000000" step="1" defaultValue={product?.stock ?? 0} required disabled={uploading} />
+                <small style={{ fontSize: '11px', color: '#768571' }}>Inventory available for sale</small>
+              </label>
+              <label>
+                <span>Separate Delivery Charge (₹) (Optional)</span>
+                <input
+                  name="deliveryCharge"
+                  type="number"
+                  min="0"
+                  max="50000"
+                  step="1"
+                  defaultValue={product?.deliveryCharge ?? ''}
+                  placeholder="e.g. 150 (blank = global store rate)"
+                  disabled={uploading}
+                />
+                <small style={{ fontSize: '11px', color: '#768571' }}>Overrides store global delivery charge for this item</small>
+              </label>
+            </div>
 
             <label>
               Short description

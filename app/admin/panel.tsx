@@ -1071,6 +1071,11 @@ export function AdminPanel({ tab }: { tab: Tab }) {
                                   {money(p.originalPrice)}
                                 </span>
                               )}
+                              {p.deliveryCharge !== undefined && p.deliveryCharge !== null && (
+                                <span style={{ display: 'block', fontSize: '11px', color: '#0d9488', fontWeight: 600 }}>
+                                  Delivery: {money(p.deliveryCharge)}
+                                </span>
+                              )}
                             </div>
                             <div className="admin-stock" style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', alignItems: 'center' }}>
                               <span className={`admin-badge ${p.stock ? 'green' : 'neutral'}`}>
@@ -1466,7 +1471,7 @@ export function AdminPanel({ tab }: { tab: Tab }) {
                     <span className="admin-setting-icon"><Icon name="file" /></span>
                     <span className="admin-tile-arrow"><Icon name="arrow" /></span>
                     <h2>Edit hero banner</h2>
-                    <p>Customize the headline, description and featured hero image on your homepage.</p>
+                    <p>Customize the headline, description and up to 3 rotating hero images (2s auto-cycle).</p>
                   </button>
                   <button className="admin-setting-tile" onClick={() => setModal('settings')}>
                     <span className="admin-setting-icon sage"><Icon name="shield" /></span>

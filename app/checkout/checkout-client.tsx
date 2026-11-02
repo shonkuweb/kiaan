@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import Link from 'next/link';
 import { useStore, Icon } from '../components/storefront';
-import { money, getProductImageUrl } from '../lib/products';
+import { money, getProductImageUrl, calculateDeliveryFee, hasCustomDelivery } from '../lib/products';
 
 interface OrderSuccessData {
   orderId: string;
@@ -72,15 +72,21 @@ export function CheckoutClient() {
 
   // Cart items & subtotal
   const items = products.filter(p => cart[p.id] && cart[p.id] > 0);
-  const subtotal = items.reduce((sum, p) => sum + p.price * cart[p.id], 0);
-  const itemCount = items.reduce((sum, p) => sum + cart[p.id], 0);
-
-  // Dynamic delivery calculations from store settings
-  const freeShippingThreshold = settings?.freeDeliveryThreshold ?? 999;
-  const standardDelivery = settings?.deliveryCharge ?? 69;
-  const isFreeShipping = freeShippingThreshold > 0 && subtotal >= freeShippingThreshold;
-  const shippingFee = itemCount > 0 && subtotal > 0 ? (isFreeShipping ? 0 : standardDelivery) : 0;
-  const totalAmount = subtotal + shippingFee;
+  const cartItemsWithQty = items.map(p => ({ ...p, quantity: cart[p.id] }));
+  const deliveryCalc = calculateDeliveryFee(cartItemsWithQty, settings);
+  const subtotal = deliveryCalc.subtotal;
+  const itemCount = deliveryCalc.itemCount;
+  const shippingFee = deliveryCalc.shippingFee;
+  const totalAmount = deliveryCalc.totalAmount;
+  const {
+    customDeliveryFee,
+    globalDeliveryFee,
+    hasCustomDeliveryItems,
+    hasGlobalDeliveryItems,
+    isGlobalFreeDelivery,
+    freeShippingThreshold,
+    amountNeededForFreeDelivery,
+  } = deliveryCalc;
 
   // Minimum order rules from store settings
   const minOrderValue = settings?.minOrderValue ?? 0;
@@ -631,6 +637,13 @@ export function CheckoutClient() {
                       <div className="checkout-item-details">
                         <h4>{p.name}</h4>
                         <p className="checkout-item-unit">{money(p.price)} each</p>
+                        {hasCustomDelivery(p) && (
+                          <div style={{ marginTop: '2px', marginBottom: '4px' }}>
+                            <span style={{ fontSize: '11px', color: '#047857', background: '#ecfdf5', padding: '1px 6px', borderRadius: '4px', fontWeight: 600 }}>
+                              Delivery: {money(p.deliveryCharge)}
+                            </span>
+                          </div>
+                        )}
                         <div className="checkout-item-qty-bar">
                           <button
                             type="button"
@@ -665,7 +678,20 @@ export function CheckoutClient() {
               </div>
 
               {/* Free shipping indicator */}
-              {freeShippingThreshold > 0 && !isFreeShipping && subtotal > 0 && (
+              {hasGlobalDeliveryItems && freeShippingThreshold > 0 && !isGlobalFreeDelivery && amountNeededForFreeDelivery > 0 && (
+                <div className="free-shipping-progress">
+                  <div className="progress-info">
+                    <span>Add {money(amountNeededForFreeDelivery)} more standard items for <strong>FREE Standard Delivery</strong></span>
+                  </div>
+                  <div className="progress-bar">
+                    <div
+                      className="progress-fill"
+                      style={{ width: `${Math.min(100, Math.round(((freeShippingThreshold - amountNeededForFreeDelivery) / freeShippingThreshold) * 100))}%` }}
+                    />
+                  </div>
+                </div>
+              )}
+              {!hasCustomDeliveryItems && freeShippingThreshold > 0 && !isGlobalFreeDelivery && subtotal > 0 && (
                 <div className="free-shipping-progress">
                   <div className="progress-info">
                     <span>Add {money(freeShippingThreshold - subtotal)} more for <strong>FREE Delivery</strong></span>
@@ -688,13 +714,23 @@ export function CheckoutClient() {
                 <div className="breakdown-row">
                   <dt>Shipping</dt>
                   <dd>
-                    {isFreeShipping ? (
+                    {shippingFee === 0 ? (
                       <span className="free-shipping-tag">FREE</span>
                     ) : (
                       money(shippingFee)
                     )}
                   </dd>
                 </div>
+                {hasCustomDeliveryItems && hasGlobalDeliveryItems && (
+                  <div style={{ display: 'flex', justifyContent: 'flex-end', fontSize: '11px', color: '#64748b', marginTop: '-6px', marginBottom: '8px' }}>
+                    <span>({money(customDeliveryFee)} separate item delivery + {isGlobalFreeDelivery ? 'FREE standard' : `${money(globalDeliveryFee)} standard`})</span>
+                  </div>
+                )}
+                {hasCustomDeliveryItems && !hasGlobalDeliveryItems && (
+                  <div style={{ display: 'flex', justifyContent: 'flex-end', fontSize: '11px', color: '#64748b', marginTop: '-6px', marginBottom: '8px' }}>
+                    <span>(Separate item delivery applied)</span>
+                  </div>
+                )}
                 <div className="breakdown-row grand-total">
                   <dt>Total Amount</dt>
                   <dd>{money(totalAmount)}</dd>
